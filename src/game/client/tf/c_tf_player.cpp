@@ -136,7 +136,6 @@
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
-
 using namespace GCSDK;
 
 static_assert( TEAM_UNASSIGNED == 0, "If this assert fires, update the assert and the enum in ctexturecompositor.cpp which specifies team colors" );
@@ -10185,32 +10184,72 @@ void C_TFPlayer::CreateBoneAttachmentsFromWearables( C_TFRagdoll *pRagdoll, bool
 // Purpose: Loop through all non-standard items carried by this player, and pick the next one.
 //			pLastItem - pointer to the int that stores the last item found, for iteration purposes.
 //-----------------------------------------------------------------------------
-CEconItemView *C_TFPlayer::GetInspectItem( int *pLastItem )
+CEconItemView* C_TFPlayer::GetInspectItem(int* pLastItem)
 {
 	int iItemsFound = 0;
-	CEconItemView *pFirstItem = NULL;
-	int nCount = WeaponCount();
-	for ( int i = 0; i < nCount; ++i )
+	CEconItemView* pFirstItem = NULL;
+
+	// NEW: If player is taunting, show the active taunt FIRST in the list
+	if ( m_Shared.InCond( TF_COND_TAUNTING ) && ( m_nActiveTauntSlot >= LOADOUT_POSITION_TAUNT && m_nActiveTauntSlot <= LOADOUT_POSITION_TAUNT8) )
 	{
-		C_BaseCombatWeapon *pWeapon = GetWeapon(i);
-		if ( !pWeapon )
+		// Check if they have a valid taunt slot active
+		CTFPlayerInventory* pInv = Inventory();
+		if (pInv)
+		{
+			int iClass = GetPlayerClass()->GetClassIndex();
+
+			// Get the EXACT taunt item from the active slot
+			CEconItemView* pTauntItem = pInv->GetItemInLoadout(iClass, m_nActiveTauntSlot);
+			if (pTauntItem && pTauntItem->IsValid())
+			{
+				// Don't show hidden items
+				if (!pTauntItem->GetItemDefinition() || !pTauntItem->GetItemDefinition()->IsHidden())
+				{
+					// Add the active taunt as the first item in the list
+					if (!pFirstItem)
+					{
+						pFirstItem = pTauntItem;
+					}
+
+					iItemsFound++;
+					if (iItemsFound <= *pLastItem)
+					{
+						// User wants to see more items, continue to weapons/wearables below
+					}
+					else
+					{
+						// This is the item to show
+						*pLastItem = iItemsFound;
+						return pTauntItem;
+					}
+				}
+			}
+		}
+	}
+
+	// Check weapons
+	int nCount = WeaponCount();
+	for (int i = 0; i < nCount; ++i)
+	{
+		C_BaseCombatWeapon* pWeapon = GetWeapon(i);
+		if (!pWeapon)
 			continue;
 
-		CEconItemView *pTmp = pWeapon->GetAttributeContainer()->GetItem();
-		if ( !pTmp->IsValid() )
+		CEconItemView* pTmp = pWeapon->GetAttributeContainer()->GetItem();
+		if (!pTmp->IsValid())
 			continue;
 
 		// don't show hidden items in the inspect panel
-		if ( pTmp->GetItemDefinition() && pTmp->GetItemDefinition()->IsHidden() )
+		if (pTmp->GetItemDefinition() && pTmp->GetItemDefinition()->IsHidden())
 			continue;
 
-		if ( !pFirstItem )
+		if (!pFirstItem)
 		{
 			pFirstItem = pTmp;
 		}
 
 		iItemsFound++;
-		if ( iItemsFound <= *pLastItem )
+		if (iItemsFound <= *pLastItem)
 			continue;
 
 		// Found the next item, we're done.
@@ -10218,24 +10257,24 @@ CEconItemView *C_TFPlayer::GetInspectItem( int *pLastItem )
 		return pTmp;
 	}
 
-	// Check wearables too
+	// Check wearables
 	nCount = GetNumWearables();
-	for ( int i = 0; i < nCount; ++i )
+	for (int i = 0; i < nCount; ++i)
 	{
-		C_EconWearable *pWearable = GetWearable(i);
-		if ( pWearable )
+		C_EconWearable* pWearable = GetWearable(i);
+		if (pWearable)
 		{
-			CEconItemView *pTmp = pWearable->GetAttributeContainer()->GetItem();
-			if ( !pTmp->IsValid() )
+			CEconItemView* pTmp = pWearable->GetAttributeContainer()->GetItem();
+			if (!pTmp->IsValid())
 				continue;
 
-			if ( !pFirstItem )
+			if (!pFirstItem)
 			{
 				pFirstItem = pTmp;
 			}
 
 			iItemsFound++;
-			if ( iItemsFound <= *pLastItem )
+			if (iItemsFound <= *pLastItem)
 				continue;
 
 			// Found the next item, we're done.
@@ -10245,7 +10284,7 @@ CEconItemView *C_TFPlayer::GetInspectItem( int *pLastItem )
 	}
 
 	// If we didn't find an item, go back to the first one
-	if ( pFirstItem )
+	if (pFirstItem)
 	{
 		*pLastItem = 1;
 		return pFirstItem;

@@ -983,32 +983,62 @@ void CTFSpectatorGUI::UpdateItemPanel( bool bForce )
 
 						Label* pItemLabel = m_pItemPanel->FindControl<Label>( "ItemLabel" );
 
-						CBasePlayer *pOriginalOwner = GetPlayerByAccountID( pItemToShow->GetAccountID() );
+						const char* pszItemClass = pItemToShow->GetStaticData()->GetItemClass();
 
-						// Change the label text depending on if the original owner is holding the weapon
-						if ( pItemLabel )
+						// Taunt
+						if (V_stricmp(pszItemClass, "taunt") == 0)
 						{
-							CSteamID steamIDOwner;
-							pPlayer->GetSteamID( &steamIDOwner );
-							bool bOriginalOwner = !pOriginalOwner || steamIDOwner.GetAccountID() == pItemToShow->GetAccountID();
-							pItemLabel->SetText( bOriginalOwner ? "#FreezePanel_Item" : "#FreezePanel_ItemOtherOwner" );
+							if (pItemLabel)
+							{
+								pItemLabel->SetText("#FreezePanel_Taunt");
+							}
 						}
-						
-
-						bVisible = true;
-						m_pItemPanel->SetDialogVariable( "killername", g_TF_PR->GetPlayerName( pPlayer->entindex() ) );
-
-						// Set the item owner's name
-						if ( pOriginalOwner )
+						// Wearable
+						else if (V_strnicmp(pszItemClass, "tf_wearable", 11) == 0)
 						{
-							m_pItemPanel->SetDialogVariable( "ownername", g_TF_PR->GetPlayerName( pOriginalOwner->entindex() ) );
+							if (pItemLabel)
+							{
+								pItemLabel->SetText("#FreezePanel_Wearable");
+							}
+						}
+						else
+						{
+							CBasePlayer* pOriginalOwner = GetPlayerByAccountID(pItemToShow->GetAccountID());
+
+							// Change the label text depending on if the original owner is holding the weapon
+							if (pItemLabel)
+							{
+								CSteamID steamIDOwner;
+								pPlayer->GetSteamID(&steamIDOwner);
+								bool bOriginalOwner = !pOriginalOwner || steamIDOwner.GetAccountID() == pItemToShow->GetAccountID();
+								pItemLabel->SetText(bOriginalOwner ? "#FreezePanel_Item" : "#FreezePanel_ItemOtherOwner");
+							}
+
+
+							//bVisible = true;
+							//m_pItemPanel->SetDialogVariable("killername", g_TF_PR->GetPlayerName(pPlayer->entindex()));
+
+							// Set the item owner's name
+							if (pOriginalOwner)
+							{
+								m_pItemPanel->SetDialogVariable("ownername", g_TF_PR->GetPlayerName(pOriginalOwner->entindex()));
+							}
+
+							m_pItemPanel->SetItem(pItemToShow);
+
+							// force update description to get the correct panel size
+							//m_pItemPanel->UpdateDescription();
+							//m_pItemPanel->SetPos(ScreenWidth() - XRES(10) - m_pItemPanel->GetWide(), ScreenHeight() - YRES(12) - m_pItemPanel->GetTall());
 						}
 
-						m_pItemPanel->SetItem( pItemToShow );
+						m_pItemPanel->SetDialogVariable("killername", g_TF_PR->GetPlayerName(pPlayer->entindex()));
+
+						m_pItemPanel->SetItem(pItemToShow);
 
 						// force update description to get the correct panel size
 						m_pItemPanel->UpdateDescription();
-						m_pItemPanel->SetPos( ScreenWidth() - XRES( 10 ) - m_pItemPanel->GetWide(), ScreenHeight() - YRES( 12 ) - m_pItemPanel->GetTall() );
+						m_pItemPanel->SetPos(ScreenWidth() - XRES(10) - m_pItemPanel->GetWide(), ScreenHeight() - YRES(12) - m_pItemPanel->GetTall());
+						
 					}	
 				}
 			}

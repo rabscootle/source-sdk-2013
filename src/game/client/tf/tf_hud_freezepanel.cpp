@@ -441,44 +441,87 @@ void CTFFreezePanel::FireGameEvent( IGameEvent * event )
 					m_pItemPanel->SetItem( &item );
 					m_pItemPanel->SetVisible( true );
 				}
+				else if ( pTFPlayerKiller && pTFPlayerKiller->m_Shared.InCond( TF_COND_TAUNTING ) )
+				{
+
+				}
 				else
 				{
-					// If our killer is using an item, display its stats.
-					CTFWeaponBase *pWeapon = pTFPlayerKiller ? pTFPlayerKiller->GetActiveTFWeapon() : NULL;
-					bool bShowItem = false;
-					if ( pWeapon )
+					bool bItemShown = false;
+
+					// If our killer is taunting, show the exact taunt they're performing
+					if (pTFPlayerKiller && pTFPlayerKiller->m_Shared.InCond(TF_COND_TAUNTING))
 					{
-						bShowItem = pWeapon->GetAttributeContainer()->GetItem()->GetItemQuality() != AE_NORMAL;
-						if ( bShowItem )
+						// Get the active taunt slot - this tells us EXACTLY which taunt is being performed
+						int nActiveTauntSlot = pTFPlayerKiller->m_nActiveTauntSlot;
+
+						// Check if they have a valid taunt slot active
+						if (nActiveTauntSlot >= LOADOUT_POSITION_TAUNT &&
+							nActiveTauntSlot <= LOADOUT_POSITION_TAUNT8)
 						{
-							CTFStatPanel *pStatPanel = GET_HUDELEMENT( CTFStatPanel );
-							if ( pStatPanel && pStatPanel->IsVisible() )
+							CTFPlayerInventory* pInv = pTFPlayerKiller->Inventory();
+							if (pInv)
 							{
-								// Stat panel overrides.
-								bShowItem = false;
+								int iClass = pTFPlayerKiller->GetPlayerClass()->GetClassIndex();
+
+								// Get the EXACT taunt item from the active slot
+								CEconItemView* pTauntItem = pInv->GetItemInLoadout(iClass, nActiveTauntSlot);
+								if (pTauntItem && pTauntItem->IsValid())
+								{
+									// Don't show hidden items
+									if (!pTauntItem->GetItemDefinition() || !pTauntItem->GetItemDefinition()->IsHidden())
+									{
+										// Show the exact taunt they're performing!
+										m_pItemPanel->SetDialogVariable("killername", g_PR->GetPlayerName(m_iKillerIndex));
+										m_pItemPanel->SetItem(pTauntItem);
+										m_pItemPanel->SetVisible(true);
+										bItemShown = true;
+									}
+								}
 							}
 						}
 					}
 
-					if ( bShowItem )
+					// If we didn't show a taunt (not taunting, or weapon taunt), show weapon if it's special
+					if (!bItemShown)
 					{
-						Label* pItemLabel = m_pItemPanel->FindControl<Label>( "ItemLabel" );
-						CEconItemView *pItemToShow = pWeapon->GetAttributeContainer()->GetItem();
-
-						if ( pItemToShow && !pItemToShow->IsUndefined() )
+						// If our killer is using an item, display its stats.
+						CTFWeaponBase* pWeapon = pTFPlayerKiller ? pTFPlayerKiller->GetActiveTFWeapon() : NULL;
+						bool bShowItem = false;
+						if (pWeapon)
 						{
-							if ( pItemLabel )
+							bShowItem = pWeapon->GetAttributeContainer()->GetItem()->GetItemQuality() != AE_NORMAL;
+							if (bShowItem)
 							{
-								// Change the label text depending on if they're holding someone else's item
-								CBasePlayer *pOriginalOwner = GetPlayerByAccountID( pItemToShow->GetAccountID() );
-								bool bOriginalOwner = !pOriginalOwner || pOriginalOwner == pKiller;
-								pItemLabel->SetText( bOriginalOwner ? "#FreezePanel_Item" : "#FreezePanel_ItemOtherOwner" );
-								m_pItemPanel->SetDialogVariable( "ownername", pOriginalOwner ? g_PR->GetPlayerName( pOriginalOwner->entindex() ) : "" );
+								CTFStatPanel* pStatPanel = GET_HUDELEMENT(CTFStatPanel);
+								if (pStatPanel && pStatPanel->IsVisible())
+								{
+									// Stat panel overrides.
+									bShowItem = false;
+								}
 							}
+						}
 
-							m_pItemPanel->SetDialogVariable( "killername", g_PR->GetPlayerName( m_iKillerIndex ) );
-							m_pItemPanel->SetItem( pItemToShow );
-							m_pItemPanel->SetVisible( true );
+						if (bShowItem)
+						{
+							Label* pItemLabel = m_pItemPanel->FindControl<Label>("ItemLabel");
+							CEconItemView* pItemToShow = pWeapon->GetAttributeContainer()->GetItem();
+
+							if (pItemToShow && !pItemToShow->IsUndefined())
+							{
+								if (pItemLabel)
+								{
+									// Change the label text depending on if they're holding someone else's item
+									CBasePlayer* pOriginalOwner = GetPlayerByAccountID(pItemToShow->GetAccountID());
+									bool bOriginalOwner = !pOriginalOwner || pOriginalOwner == pKiller;
+									pItemLabel->SetText(bOriginalOwner ? "#FreezePanel_Item" : "#FreezePanel_ItemOtherOwner");
+									m_pItemPanel->SetDialogVariable("ownername", pOriginalOwner ? g_PR->GetPlayerName(pOriginalOwner->entindex()) : "");
+								}
+
+								m_pItemPanel->SetDialogVariable("killername", g_PR->GetPlayerName(m_iKillerIndex));
+								m_pItemPanel->SetItem(pItemToShow);
+								m_pItemPanel->SetVisible(true);
+							}
 						}
 					}
 				}
