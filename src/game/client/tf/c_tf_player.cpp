@@ -3200,6 +3200,12 @@ bool CStatTrakDigitProxy::HelperOnBindGetStatTrakScore( void *pC_BaseEntity, int
 				if ( pItem && pItem->FindAttribute( GetKillEaterAttr_Score( 0 ), &unScore ) )
 				{
 					*piScore = unScore;
+					// MvM Check
+					if (TFGameRules() && TFGameRules()->IsMannVsMachineMode()
+						&& GetKilleaterValueByEvent(pWeap->GetAttributeContainer()->GetItem(), kKillEaterEvent_RobotsDestroyed, unScore))
+					{
+						*piScore = unScore;
+					}
 					bReturnValue = true;
 				}
 			}
@@ -3216,6 +3222,11 @@ bool CStatTrakDigitProxy::HelperOnBindGetStatTrakScore( void *pC_BaseEntity, int
 					if ( pItem && pItem->FindAttribute( GetKillEaterAttr_Score( 0 ), &unScore ) )
 					{
 						*piScore = unScore;
+						if (TFGameRules() && TFGameRules()->IsMannVsMachineMode()
+							&& GetKilleaterValueByEvent(pWeap->GetAttributeContainer()->GetItem(), kKillEaterEvent_RobotsDestroyed, unScore))
+						{
+							*piScore = unScore;
+						}
 						bReturnValue = true;
 					}
 				}
