@@ -10189,39 +10189,29 @@ CEconItemView* C_TFPlayer::GetInspectItem(int* pLastItem)
 	int iItemsFound = 0;
 	CEconItemView* pFirstItem = NULL;
 
-	// If player is taunting, use their active taunt item view
+	// If player is taunting, add their active taunt as the first item
 	if (m_Shared.InCond(TF_COND_TAUNTING))
 	{
 		if (m_TauntEconItemView.IsValid())
 		{
-			// This works for ALL players, not just local!
-			return &m_TauntEconItemView;
-
-			// Get the EXACT taunt item from the active slot
-			CEconItemView* pTauntItem = &m_TauntEconItemView;
-			if (pTauntItem && pTauntItem->IsValid())
+			// Don't show hidden items
+			if (!m_TauntEconItemView.GetItemDefinition() || !m_TauntEconItemView.GetItemDefinition()->IsHidden())
 			{
-				// Don't show hidden items
-				if (!pTauntItem->GetItemDefinition() || !pTauntItem->GetItemDefinition()->IsHidden())
+				// Set as first item
+				if (!pFirstItem)
 				{
-					// Add the active taunt as the first item in the list
-					if (!pFirstItem)
-					{
-						pFirstItem = pTauntItem;
-					}
-
-					iItemsFound++;
-					if (iItemsFound <= *pLastItem)
-					{
-						// User wants to see more items, continue to weapons/wearables below
-					}
-					else
-					{
-						// This is the item to show
-						*pLastItem = iItemsFound;
-						return pTauntItem;
-					}
+					pFirstItem = &m_TauntEconItemView;
 				}
+
+				iItemsFound++;  // This is item #1
+
+				// Check if THIS is the item user wants to see
+				if (iItemsFound > *pLastItem)  // CORRECT - Show this item
+				{
+					*pLastItem = iItemsFound;
+					return &m_TauntEconItemView;
+				}
+				// Otherwise continue to weapons/wearables below
 			}
 		}
 	}
