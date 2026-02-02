@@ -441,10 +441,6 @@ void CTFFreezePanel::FireGameEvent( IGameEvent * event )
 					m_pItemPanel->SetItem( &item );
 					m_pItemPanel->SetVisible( true );
 				}
-				else if ( pTFPlayerKiller && pTFPlayerKiller->m_Shared.InCond( TF_COND_TAUNTING ) )
-				{
-
-				}
 				else
 				{
 					bool bItemShown = false;
