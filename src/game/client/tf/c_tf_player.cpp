@@ -10189,6 +10189,45 @@ CEconItemView *C_TFPlayer::GetInspectItem( int *pLastItem )
 {
 	int iItemsFound = 0;
 	CEconItemView *pFirstItem = NULL;
+
+	// NEW: Check if player is taunting first. We want to show what taunt they are performing first.
+	if ( m_Shared.InCond( TF_COND_TAUNTING ) && ( m_nActiveTauntSlot >= LOADOUT_POSITION_TAUNT && m_nActiveTauntSlot <= LOADOUT_POSITION_TAUNT8 ) )
+	{
+		// Check if they have a valid taunt slot active
+		CTFPlayerInventory* pInv = Inventory();
+		if ( pInv )
+		{
+			int iClass = GetPlayerClass()->GetClassIndex();
+
+			// Get the EXACT taunt item from the active slot
+			CEconItemView* pTmp = pInv->GetItemInLoadout( iClass, m_nActiveTauntSlot );
+			if (pTmp && pTmp->IsValid() )
+			{
+				// Don't show hidden items
+				if ( !pTmp->GetItemDefinition() || !pTmp->GetItemDefinition()->IsHidden() )
+				{
+					// Add the active taunt as the first item in the list
+					if ( !pFirstItem )
+					{
+						pFirstItem = pTmp;
+					}
+
+					iItemsFound++;
+					if ( iItemsFound <= *pLastItem )
+					{
+						// User wants to see more items, continue to weapons/wearables below
+					}
+					else
+					{
+						// This is the item to show
+						*pLastItem = iItemsFound;
+						return pTmp;
+					}
+				}
+			}
+		}
+	}
+
 	int nCount = WeaponCount();
 	for ( int i = 0; i < nCount; ++i )
 	{
