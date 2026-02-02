@@ -10199,7 +10199,7 @@ CEconItemView* C_TFPlayer::GetInspectItem(int* pLastItem)
 			int iClass = GetPlayerClass()->GetClassIndex();
 
 			// Get the EXACT taunt item from the active slot
-			CEconItemView* pTauntItem = pInv->GetItemInLoadout(iClass, m_nActiveTauntSlot);
+			CEconItemView* pTauntItem = pInv->GetCacheServerItemInLoadout(iClass, m_nActiveTauntSlot);
 			if (pTauntItem && pTauntItem->IsValid())
 			{
 				// Don't show hidden items
