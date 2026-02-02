@@ -10189,11 +10189,27 @@ CEconItemView* C_TFPlayer::GetInspectItem(int* pLastItem)
 	int iItemsFound = 0;
 	CEconItemView* pFirstItem = NULL;
 
+	// DEBUG: Print information about the player and their taunt state
+	C_TFPlayer* pLocalPlayer = C_TFPlayer::GetLocalTFPlayer();
+	bool bIsLocalPlayer = (this == pLocalPlayer);
+
+	Msg("=== GetInspectItem Debug ===\n");
+	Msg("Player: %s (%s)\n", GetPlayerName(), bIsLocalPlayer ? "LOCAL" : "OTHER");
+	Msg("Is Taunting: %s\n", m_Shared.InCond(TF_COND_TAUNTING) ? "YES" : "NO");
+
 	// If player is taunting, add their active taunt as the first item
 	if (m_Shared.InCond(TF_COND_TAUNTING))
 	{
+		// Debug the taunt variables
+		Msg("m_nActiveTauntSlot: %d\n", m_nActiveTauntSlot);
+		Msg("m_iTauntItemDefIndex: %d\n", m_iTauntItemDefIndex);
+		Msg("m_TauntEconItemView.IsValid(): %s\n", m_TauntEconItemView.IsValid() ? "YES" : "NO");
+
 		if (m_TauntEconItemView.IsValid())
 		{
+			Msg("Taunt Item Name: %s\n", m_TauntEconItemView.GetStaticData()->GetItemBaseName());
+			Msg("Taunt Item Def Index: %d\n", m_TauntEconItemView.GetItemDefIndex());
+
 			// Don't show hidden items
 			if (!m_TauntEconItemView.GetItemDefinition() || !m_TauntEconItemView.GetItemDefinition()->IsHidden())
 			{
@@ -10203,18 +10219,66 @@ CEconItemView* C_TFPlayer::GetInspectItem(int* pLastItem)
 					pFirstItem = &m_TauntEconItemView;
 				}
 
-				iItemsFound++;  // This is item #1
+				iItemsFound++;
+				Msg("Added taunt as item #%d\n", iItemsFound);
 
 				// Check if THIS is the item user wants to see
-				if (iItemsFound > *pLastItem)  // CORRECT - Show this item
+				if (iItemsFound > *pLastItem)
 				{
+					Msg("Returning taunt!\n");
 					*pLastItem = iItemsFound;
 					return &m_TauntEconItemView;
 				}
-				// Otherwise continue to weapons/wearables below
+			}
+			else
+			{
+				Msg("Taunt is hidden, skipping\n");
+			}
+		}
+		else
+		{
+			Msg("m_TauntEconItemView is NOT valid!\n");
+
+			// DEBUG: Try alternative methods
+			Msg("Attempting alternative methods...\n");
+
+			// Try using m_iTauntItemDefIndex directly
+			if (m_iTauntItemDefIndex != INVALID_ITEM_DEF_INDEX)
+			{
+				Msg("m_iTauntItemDefIndex is valid: %d\n", m_iTauntItemDefIndex);
+				Msg("But m_TauntEconItemView wasn't initialized - this is the problem!\n");
+			}
+
+			// Try GetCacheServerItemInLoadout
+			if (m_nActiveTauntSlot >= LOADOUT_POSITION_TAUNT &&
+				m_nActiveTauntSlot <= LOADOUT_POSITION_TAUNT8)
+			{
+				CTFPlayerInventory* pInv = Inventory();
+				if (pInv)
+				{
+					int iClass = GetPlayerClass()->GetClassIndex();
+					CEconItemView* pTauntFromCache = pInv->GetCacheServerItemInLoadout(iClass, m_nActiveTauntSlot);
+
+					Msg("Tried GetCacheServerItemInLoadout: %s\n",
+						(pTauntFromCache && pTauntFromCache->IsValid()) ? "SUCCESS" : "FAILED");
+
+					if (pTauntFromCache && pTauntFromCache->IsValid())
+					{
+						Msg("Cache taunt name: %s\n", pTauntFromCache->GetStaticData()->GetItemBaseName());
+					}
+				}
+				else
+				{
+					Msg("Inventory() returned NULL\n");
+				}
 			}
 		}
 	}
+	else
+	{
+		Msg("Player is not taunting\n");
+	}
+
 
 	// Check weapons
 	int nCount = WeaponCount();
