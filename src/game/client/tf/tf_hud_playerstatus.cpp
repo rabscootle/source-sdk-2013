@@ -356,7 +356,7 @@ void CTFHudPlayerClass::OnThink()
 					}
 				}
 				// NEW: We're holding our own weapon! Display custom name and/or strange count
-				else if (bOwnsWeapon && m_pCarryingLabel && cl_hud_playerclass_display_weapon_info.GetBool())
+				else if ( bOwnsWeapon && m_pCarryingLabel && cl_hud_playerclass_display_weapon_info.GetBool() )
 				{
 					locchar_t wszLocString[128];
 
@@ -384,16 +384,16 @@ void CTFHudPlayerClass::OnThink()
 						V_snwprintf(wszNumber, sizeof(wszNumber) / sizeof(wchar_t), L"%d", (int)unScore);
 
 
-						// Extracting killeater type value to get the right localized string
+						// Extracting strange count type value to get the right localized string
 						uint32 unKillEaterType = 0;
 						bool bFoundUniqueKillEaterType = pItem->FindAttribute( GetKillEaterAttr_Type(0), &unKillEaterType );
 
 						float flValue;
-						// Need to convert pulled attribute so we can use to pull localization key from schema. This is a little yucky but works.
+						// Need to convert pulled attribute so we can use to pull localization key from schema. This works :)
 						memcpy( &flValue, &unKillEaterType, sizeof(float) );
 						unKillEaterType = (uint32)flValue;
 
-						// Get the localization key for this killeater type
+						// Get the localization key for this strange count type
 						const char* pszLocalizedKey = GetItemSchema()->GetKillEaterScoreTypeLocString( unKillEaterType );
 
 						// Look up the localized string
