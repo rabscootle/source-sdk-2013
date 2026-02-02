@@ -10189,17 +10189,16 @@ CEconItemView* C_TFPlayer::GetInspectItem(int* pLastItem)
 	int iItemsFound = 0;
 	CEconItemView* pFirstItem = NULL;
 
-	// NEW: If player is taunting, show the active taunt FIRST in the list
-	if ( m_Shared.InCond( TF_COND_TAUNTING ) && ( m_nActiveTauntSlot >= LOADOUT_POSITION_TAUNT && m_nActiveTauntSlot <= LOADOUT_POSITION_TAUNT8) )
+	// If player is taunting, use their active taunt item view
+	if (m_Shared.InCond(TF_COND_TAUNTING))
 	{
-		// Check if they have a valid taunt slot active
-		CTFPlayerInventory* pInv = Inventory();
-		if (pInv)
+		if (m_TauntEconItemView.IsValid())
 		{
-			int iClass = GetPlayerClass()->GetClassIndex();
+			// This works for ALL players, not just local!
+			return &m_TauntEconItemView;
 
 			// Get the EXACT taunt item from the active slot
-			CEconItemView* pTauntItem = pInv->GetCacheServerItemInLoadout(iClass, m_nActiveTauntSlot);
+			CEconItemView* pTauntItem = &m_TauntEconItemView;
 			if (pTauntItem && pTauntItem->IsValid())
 			{
 				// Don't show hidden items

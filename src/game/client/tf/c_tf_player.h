@@ -700,14 +700,13 @@ private:
 	float			m_flTauntStartTime;
 	float			m_flTauntDuration;
 
-	CEconItemView	m_TauntEconItemView;
-
 public:
 
 	int				m_nOldWaterLevel;
 	float			m_flWaterEntryTime;
 	bool			m_bWaterExitEffectActive;
 	int				m_nActiveTauntSlot;
+	CEconItemView	m_TauntEconItemView;
 
 	bool			m_bDuckJumpInterp;
 	float			m_flFirstDuckJumpInterp;
