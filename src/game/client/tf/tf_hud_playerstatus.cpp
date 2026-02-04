@@ -41,7 +41,7 @@ ConVar cl_hud_playerclass_use_playermodel( "cl_hud_playerclass_use_playermodel",
 
 ConVar cl_hud_playerclass_playermodel_showed_confirm_dialog( "cl_hud_playerclass_playermodel_showed_confirm_dialog", "0", FCVAR_ARCHIVE | FCVAR_HIDDEN );
 
-ConVar cl_hud_playerclass_display_weapon_info("cl_hud_playerclass_display_weapon_info", "0", FCVAR_ARCHIVE, "Display information for your own weapons in player class HUD.");
+ConVar cl_hud_playerclass_display_weapon_info( "cl_hud_playerclass_display_weapon_info", "0", FCVAR_ARCHIVE, "Display your weapon's details (custom name, strange scores) in player class HUD." );
 
 extern ConVar tf_max_health_boost;
 
@@ -344,7 +344,7 @@ void CTFHudPlayerClass::OnThink()
 					if ( pOwner )
 					{
 						// Fill out the actual owner's name
-						locchar_t wszStolenString[128];
+						locchar_t wszStolenString [128];
 						g_pVGuiLocalize->ConvertANSIToUnicode( pOwner->GetPlayerName(), wszPlayerName, sizeof(wszPlayerName) );
 						g_pVGuiLocalize->ConstructString_safe( wszStolenString, g_pVGuiLocalize->Find( "TF_WhoDropped" ), 1, wszPlayerName );
 						m_pCarryingOwnerLabel->SetText( wszStolenString );
@@ -356,9 +356,10 @@ void CTFHudPlayerClass::OnThink()
 					}
 				}
 				// NEW: We're holding our own weapon! Display custom name and/or strange count
-				else if ( bOwnsWeapon && m_pCarryingLabel && cl_hud_playerclass_display_weapon_info.GetBool() )
+				// Currently disabled in Mann Vs Machine as many panels overlap
+				else if ( ( TFGameRules() && !TFGameRules()->IsMannVsMachineMode() ) && bOwnsWeapon && m_pCarryingLabel && cl_hud_playerclass_display_weapon_info.GetBool() )
 				{
-					locchar_t wszLocString[128];
+					locchar_t wszLocString [128];
 
 					// Construct and set the weapon's name
 					g_pVGuiLocalize->ConstructString_safe( wszLocString, L"%s1", 1, pItem->GetItemName() );
@@ -374,14 +375,14 @@ void CTFHudPlayerClass::OnThink()
 
 					// If weapon is strange... retool to show strange count in owner label!
 					uint32 unScore = 0;
-					if (pItem && pItem->FindAttribute(GetKillEaterAttr_Score(0), &unScore))
+					if ( pItem && pItem->FindAttribute( GetKillEaterAttr_Score(0), &unScore ) )
 					{
-						locchar_t wszKillCountString[128];
+						locchar_t wszKillCountString [128];
 						bAddExtraLine = true;
 
 						// Try formatting as a simple string first to debug
-						wchar_t wszNumber[32];
-						V_snwprintf(wszNumber, sizeof(wszNumber) / sizeof(wchar_t), L"%d", (int)unScore);
+						wchar_t wszNumber [32];
+						V_snwprintf( wszNumber, sizeof(wszNumber) / sizeof(wchar_t), L"%d", (int)unScore );
 
 
 						// Extracting strange count type value to get the right localized string
@@ -416,7 +417,7 @@ void CTFHudPlayerClass::OnThink()
 					}
 					else
 					{
-						m_pCarryingOwnerLabel->SetText( "" );
+						m_pCarryingOwnerLabel->SetText("");
 					}
 				}
 				else
