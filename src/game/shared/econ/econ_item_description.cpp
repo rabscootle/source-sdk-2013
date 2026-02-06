@@ -713,9 +713,9 @@ static void GenerateLocalizedFullItemName
 
 		if ( pKillStreakLocalizedString )
 		{
-			loc_scpy_safe( szKillStreak, pKillStreakLocalizedString );
+			//loc_scpy_safe( szKillStreak, pKillStreakLocalizedString );
 			//  If we're appending some sort of killstreak identifier, dont use the proper name
-			bUseProperName = false;
+			//bUseProperName = false;
 		}
 	}
 

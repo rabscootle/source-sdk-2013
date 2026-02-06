@@ -331,6 +331,7 @@ private:
 	vgui::ImagePanel	*m_pIsStrangeImage;
 	vgui::ImagePanel	*m_pIsUnusualImage;
 	vgui::ImagePanel	*m_pIsLoanerImage;
+	vgui::ImagePanel	*m_pIsKillstreakImage;	// New addition for Killstreak tiers
 	vgui::Label			*m_pSeriesLabel;
 	vgui::Label			*m_pMatchesLabel;
 	vgui::EditablePanel *m_pMainContentContainer;

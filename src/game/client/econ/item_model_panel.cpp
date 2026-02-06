@@ -1373,6 +1373,7 @@ CItemModelPanel::CItemModelPanel( vgui::Panel *parent, const char *name ) : vgui
 	m_pIsStrangeImage = NULL;
 	m_pIsUnusualImage = NULL;
 	m_pIsLoanerImage = NULL;
+	m_pIsKillstreakImage = NULL;
 	m_pSeriesLabel = NULL;
 	m_pMainContentContainer = NULL;
 	m_pLoadingSpinner = NULL;
@@ -1445,6 +1446,7 @@ void CItemModelPanel::ApplySchemeSettings( vgui::IScheme *pScheme )
 	m_pIsStrangeImage = NULL;
 	m_pIsUnusualImage = NULL;
 	m_pIsLoanerImage = NULL;
+	m_pIsKillstreakImage = NULL;
 	m_pSeriesLabel = NULL;
 	m_pMatchesLabel = NULL;
 	m_pPaintIcon = NULL;
@@ -1577,6 +1579,7 @@ void CItemModelPanel::LoadResFileForCurrentItem( bool bForceLoad )
 
 	m_pIsStrangeImage = dynamic_cast<vgui::ImagePanel*>( FindChildByName( "is_strange_icon", true ) );
 	m_pIsUnusualImage = dynamic_cast<vgui::ImagePanel*>( FindChildByName( "is_unusual_icon", true ) );
+	m_pIsKillstreakImage = dynamic_cast<vgui::ImagePanel*>(FindChildByName("is_killstreak_icon", true)); // NEW! - Adding a killstreak icon to the item model panel so we can hide the text prefix in-game
 	m_pIsLoanerImage = dynamic_cast<vgui::ImagePanel*>( FindChildByName( "is_loaner_icon", true ) );
 
 	m_pSeriesLabel = dynamic_cast<vgui::Label*>( FindChildByName( "serieslabel", true ) );
@@ -1608,6 +1611,11 @@ void CItemModelPanel::LoadResFileForCurrentItem( bool bForceLoad )
 	{
 		m_pIsUnusualImage->SetKeyBoardInputEnabled( false );
 		m_pIsUnusualImage->SetMouseInputEnabled( false );
+	}
+	if (m_pIsKillstreakImage)
+	{
+		m_pIsKillstreakImage->SetKeyBoardInputEnabled(false);
+		m_pIsKillstreakImage->SetMouseInputEnabled(false);
 	}
 	if ( m_pIsLoanerImage )
 	{
@@ -1944,6 +1952,11 @@ void CItemModelPanel::PerformLayout( void )
 	{
 		m_pIsStrangeImage->SetPos( xpos - m_pIsStrangeImage->GetWide(), ypos );
 		ypos += m_pIsStrangeImage->GetTall() * 0.9;
+	}
+	if (m_pIsKillstreakImage && m_pIsKillstreakImage->IsVisible())
+	{
+		m_pIsKillstreakImage->SetPos(xpos - m_pIsKillstreakImage->GetWide(), ypos);
+		ypos += m_pIsKillstreakImage->GetTall() * 0.9;
 	}
 	if ( m_pIsLoanerImage && m_pIsLoanerImage->IsVisible() )
 	{
@@ -2975,6 +2988,10 @@ void CItemModelPanel::HideAllModifierIcons()
 	{
 		m_pIsLoanerImage->SetVisible( false );
 	}
+	if (m_pIsKillstreakImage)
+	{
+		m_pIsKillstreakImage->SetVisible(false);
+	}
 	if ( m_pSeriesLabel )
 	{
 		m_pSeriesLabel->SetVisible( false );
@@ -3326,7 +3343,7 @@ void CItemModelPanel::UpdatePanels( void )
 			{
 				if ( GetStattrak( &m_ItemData ) )
 				{
-					m_pIsStrangeImage->SetImage( "viewmode_statclock" );
+					m_pIsStrangeImage->SetImage( "viewmode_strange" );
 				}
 				else
 				{
@@ -3364,6 +3381,38 @@ void CItemModelPanel::UpdatePanels( void )
 			m_pIsLoanerImage->SetVisible( true );
 		}
 	}
+
+	//	NEW: Killstreak (icon will change based on tier)
+	if ( m_pIsKillstreakImage )
+	{
+		static CSchemaAttributeDefHandle pAttrDef_KillStreak("killstreak tier");
+		uint32 nKillStreakValue;
+
+		if (m_ItemData.FindAttribute(pAttrDef_KillStreak, &nKillStreakValue))
+		{
+			nKillStreakValue = (float&)(nKillStreakValue);
+
+			// if you have the eyeballs you are automatically higher tier
+			static CSchemaAttributeDefHandle pAttrDef_KillStreakEyes("killstreak effect");
+			static CSchemaAttributeDefHandle pAttrDef_KillStreakSheen("killstreak idleeffect");
+			if (m_ItemData.FindAttribute(pAttrDef_KillStreakEyes))
+			{
+				nKillStreakValue = 3;	// professional
+			}
+			else if (m_ItemData.FindAttribute(pAttrDef_KillStreakSheen))
+			{
+				nKillStreakValue = 2;	// specialized
+			}
+
+			if (nKillStreakValue > 0)
+			{
+				m_pIsKillstreakImage->SetImage("viewmode_streak");
+				m_pIsKillstreakImage->SetVisible(true);
+			}
+
+		}
+	}
+
 
 	InvalidateLayout();
 }
