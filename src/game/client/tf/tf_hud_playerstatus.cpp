@@ -321,17 +321,20 @@ void CTFHudPlayerClass::OnThink()
 				pPlayer->GetSteamID( &playerSteamID );
 				bool bOwnsWeapon = ( playerSteamID.GetAccountID() == pItem->GetAccountID() );
 
+				uint32 unPaintKitIndexNum = 0;
+				bool hasPaintKitIndex = GetPaintKitDefIndex(pItem, &unPaintKitIndexNum);
+
 				// We're holding a weapon we dont own!
 				if ( !bOwnsWeapon && m_pCarryingLabel )
 				{
 					locchar_t wszLocString [128];
 
 					// Construct and set the weapon's name
-					g_pVGuiLocalize->ConstructString_safe( wszLocString, L"%s1", 1, CEconItemLocalizedFullNameGenerator( GLocalizationProvider(), pItem->GetItemDefinition(), pItem->GetItemQuality() ).GetFullName() );
+					g_pVGuiLocalize->ConstructString_safe(wszLocString, L"%s1", 1, CEconItemLocalizedFullNameGenerator(GLocalizationProvider(), pItem->GetItemDefinition(), false, pItem->GetItemQuality(), (hasPaintKitIndex ? unPaintKitIndexNum : 0 ) ).GetFullName() );
 					m_pCarryingWeaponPanel->SetDialogVariable( "carrying", wszLocString );
 
 					// Get and set the rarity color of the weapon
-					const char* pszColorName = GetItemSchema()->GetRarityColor( pItem->GetItemDefinition()->GetRarity() );
+					const char* pszColorName = GetItemSchema()->GetRarityColor(pItem->GetRarity());
 					pszColorName = pszColorName ? pszColorName : "TanLight";
 					if ( pszColorName )
 					{
@@ -362,11 +365,11 @@ void CTFHudPlayerClass::OnThink()
 					locchar_t wszLocString [128];
 
 					// Construct and set the weapon's name
-					g_pVGuiLocalize->ConstructString_safe( wszLocString, L"%s1", 1, pItem->GetItemName() );
+					g_pVGuiLocalize->ConstructString_safe(wszLocString, L"%s1", 1, CEconItemLocalizedFullNameGenerator( GLocalizationProvider(), pItem->GetItemDefinition(), false, pItem->GetItemQuality(), ( hasPaintKitIndex ? unPaintKitIndexNum : 0 ) ).GetFullName() );
 					m_pCarryingWeaponPanel->SetDialogVariable( "carrying", wszLocString );
 
 					// Get and set the rarity color of the weapon
-					const char* pszColorName = GetItemSchema()->GetRarityColor( pItem->GetItemDefinition()->GetRarity() );
+					const char* pszColorName = GetItemSchema()->GetRarityColor( pItem->GetRarity() );
 					pszColorName = pszColorName ? pszColorName : "TanLight";
 					if ( pszColorName )
 					{

@@ -854,14 +854,34 @@ void CCharInfoLoadoutSubPanel::PerformLayout( void )
 	// cached pos might have come from the keyboard.
 	if( x < 0 )
 		vgui::input()->GetCursorPos(x, y);
-	for ( int iPanel = 0; iPanel < ARRAYSIZE( g_nLoadoutClassOrder ); iPanel++ )
+
+	// In the RecalculateTargetClassLayout function, find the section around line 857-869
+	// and replace with this:
+
+		// Hit detection padding for class buttons
+	const int CLASS_BUTTON_PADDING_X = 10;
+	const int CLASS_BUTTON_PADDING_Y = 5; // Reduced from 10 to avoid triggering too high
+
+	for (int iPanel = 0; iPanel < ARRAYSIZE(g_nLoadoutClassOrder); iPanel++)
 	{
 		int i = g_nLoadoutClassOrder[iPanel];
-		m_pClassButtons[i]->SetArmed( false );
+		m_pClassButtons[i]->SetArmed(false);
 
-		m_pClassButtons[i]->SetEnabled( TFInventoryManager()->GetLocalTFInventory()->RetrievedInventoryFromSteam() );
+		m_pClassButtons[i]->SetEnabled(TFInventoryManager()->GetLocalTFInventory()->RetrievedInventoryFromSteam());
 
-		if ( m_pClassButtons[i]->IsWithin( x,y ) && iBestZ < m_pClassButtons[i]->GetZPos() )
+		// Manual bounds check with padding
+		int btnX, btnY, btnWide, btnTall;
+		m_pClassButtons[i]->GetBounds(btnX, btnY, btnWide, btnTall);
+
+		// Expand bounds with padding
+		int expandedX = btnX - CLASS_BUTTON_PADDING_X;
+		int expandedY = btnY - CLASS_BUTTON_PADDING_Y;
+		int expandedWide = btnWide + (CLASS_BUTTON_PADDING_X * 2);
+		int expandedTall = btnTall + (CLASS_BUTTON_PADDING_Y * 2);
+
+		if (x >= expandedX && x < (expandedX + expandedWide) &&
+			y >= expandedY && y < (expandedY + expandedTall) &&
+			iBestZ < m_pClassButtons[i]->GetZPos())
 		{
 			iBestButton = i;
 			iBestZ = m_pClassButtons[i]->GetZPos();
@@ -1073,20 +1093,37 @@ void CCharInfoLoadoutSubPanel::OnCursorMoved( int x, int y )
 //-----------------------------------------------------------------------------
 // Purpose: Handles setting the highlighted class for both mouse and keyboard 
 //-----------------------------------------------------------------------------
-void CCharInfoLoadoutSubPanel::RecalculateTargetClassLayoutAtPos( int x, int y )
+void CCharInfoLoadoutSubPanel::RecalculateTargetClassLayoutAtPos(int x, int y)
 {
+	// Hit detection padding - adjust these if needed
+	const int CLASS_BUTTON_PADDING_X = 10;
+	const int CLASS_BUTTON_PADDING_Y = 5; // Reduced from 10 to avoid triggering too high
+	const int SUB_BUTTON_PADDING_X = 200;
+	const int SUB_BUTTON_PADDING_Y = 10;
+
 	// Ignore mouse movement outside the buttons
 	bool bWithin = false;
-	for ( int i = TF_FIRST_NORMAL_CLASS; i <= NUM_CLASSES_IN_LOADOUT_PANEL; i++ )
+	for (int i = TF_FIRST_NORMAL_CLASS; i <= NUM_CLASSES_IN_LOADOUT_PANEL; i++)
 	{
-		if ( m_pClassButtons[i]->IsWithin(x,y) )
+		// Manual bounds check with padding for class buttons
+		int btnX, btnY, btnWide, btnTall;
+		m_pClassButtons[i]->GetBounds(btnX, btnY, btnWide, btnTall);
+
+		// Expand bounds with padding
+		int expandedX = btnX - CLASS_BUTTON_PADDING_X;
+		int expandedY = btnY - CLASS_BUTTON_PADDING_Y;
+		int expandedWide = btnWide + (CLASS_BUTTON_PADDING_X * 2);
+		int expandedTall = btnTall + (CLASS_BUTTON_PADDING_Y * 2);
+
+		if (x >= expandedX && x < (expandedX + expandedWide) &&
+			y >= expandedY && y < (expandedY + expandedTall))
 		{
 			bWithin = true;
 			break;
 		}
 	}
 
-	if ( bWithin )
+	if (bWithin)
 	{
 		m_iMouseXPos = x;
 		m_iMouseYPos = y;
@@ -1097,29 +1134,75 @@ void CCharInfoLoadoutSubPanel::RecalculateTargetClassLayoutAtPos( int x, int y )
 	{
 		// See if we're over a sub button
 		bool bOverSubButton = false;
-		for ( int i = 0; i < CHSB_NUM_BUTTONS; i++ )
+
+		const int SUB_BUTTON_PADDING_X = 30; // Adjust as needed
+		const int SUB_BUTTON_PADDING_Y = 10;
+
+		for (int i = 0; i < CHSB_NUM_BUTTONS; i++)
 		{
-			if ( m_pSubButtons[i]->IsWithin(x,y) )
+			if (!m_pSubButtons[i]->IsVisible())
+				continue;
+
+			int btnX, btnY, btnWide, btnTall;
+			m_pSubButtons[i]->GetBounds(btnX, btnY, btnWide, btnTall);
+
+			int expandedX = btnX - SUB_BUTTON_PADDING_X;
+			int expandedY = btnY - SUB_BUTTON_PADDING_Y;
+			int expandedWide = btnWide + (SUB_BUTTON_PADDING_X * 2);
+			int expandedTall = btnTall + (SUB_BUTTON_PADDING_Y * 2);
+
+			if (x >= expandedX && x < (expandedX + expandedWide) &&
+				y >= expandedY && y < (expandedY + expandedTall))
 			{
 				bOverSubButton = true;
-				UpdateLabelFromSubButton( i );
+
+				// IMPORTANT: Hide class labels before showing sub button label
+				// This prevents both labels from being active at the same time
+				if (m_pClassLabel && m_pClassLabel->IsVisible())
+				{
+					m_pClassLabel->SetVisible(false);
+				}
+
+				// Clear class button state
+				if (m_iLabelSetToClass != -1)
+				{
+					// Disarm all class buttons
+					for (int iClass = TF_FIRST_NORMAL_CLASS; iClass <= NUM_CLASSES_IN_LOADOUT_PANEL; iClass++)
+					{
+						if (m_pClassButtons[iClass])
+						{
+							m_pClassButtons[iClass]->SetArmed(false);
+						}
+					}
+					m_iLabelSetToClass = -1;
+				}
+
+				// Now show the sub button label
+				UpdateLabelFromSubButton(i);
+				break;
 			}
 		}
 
-		if ( !bOverSubButton && m_pClassLabel->IsVisible() )
+		if (!bOverSubButton)
 		{
-			// Hide the class label
-			if ( m_iMouseXPos != -1 )
+			// Hide labels when not over any sub button
+			if ((m_pClassLabel && m_pClassLabel->IsVisible()) ||
+				(m_pItemsLabel && m_pItemsLabel->IsVisible() && m_iOverSubButton != -1))
 			{
-				m_iMouseXPos = -1;
-				RecalculateTargetClassLayout();
-				m_bClassLayoutDirty = true;
-			}
+				if (m_iMouseXPos != -1)
+				{
+					m_iMouseXPos = -1;
+					RecalculateTargetClassLayout();
+					m_bClassLayoutDirty = true;
+				}
 
-			m_iOverSubButton = -1;
-			m_iLabelSetToClass = -1;
-			m_pClassLabel->SetVisible( false );
-			m_pItemsLabel->SetVisible( false );
+				m_iOverSubButton = -1;
+				m_iLabelSetToClass = -1;
+				if (m_pClassLabel)
+					m_pClassLabel->SetVisible(false);
+				if (m_pItemsLabel)
+					m_pItemsLabel->SetVisible(false);
+			}
 		}
 	}
 }

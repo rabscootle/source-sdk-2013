@@ -943,6 +943,8 @@ void CTargetID::UpdateID( void )
 							pszActionIcon = "obj_weapon_pickup";
 							pszActionCommand = "+use_action_slot_item";
 						}
+
+						uint32 unPaintKitIndexNum = 0;
 	
 						if ( FStrEq( pDroppedEconItem->GetStaticData()->GetItemClass(), "tf_weapon_medigun" ) )
 						{
@@ -950,11 +952,24 @@ void CTargetID::UpdateID( void )
 							_snwprintf( wszChargeLevel, ARRAYSIZE( wszChargeLevel ) - 1, L"%.0f", pDroppedWeapon->GetChargeLevel() * 100 );
 							wszChargeLevel[ARRAYSIZE( wszChargeLevel ) - 1] = '\0';
 
-							g_pVGuiLocalize->ConstructString_safe( sIDString, L"%s1 (%s2%)", 2, CEconItemLocalizedFullNameGenerator( GLocalizationProvider(), pDroppedEconItem->GetItemDefinition(), pDroppedEconItem->GetItemQuality() ).GetFullName(), wszChargeLevel );
+							if (GetPaintKitDefIndex(pDroppedEconItem, &unPaintKitIndexNum))
+							{
+								Msg("FOUND PAINTKIT INDEX #%u\n", unPaintKitIndexNum);
+								g_pVGuiLocalize->ConstructString_safe(sIDString, L"%s1 (%s2%)", 2, CEconItemLocalizedFullNameGenerator(GLocalizationProvider(), pDroppedEconItem->GetItemDefinition(), false, pDroppedEconItem->GetItemQuality(), unPaintKitIndexNum ).GetFullName(), wszChargeLevel);
+							}
+							else
+							{
+								Msg("No paintkit index # found...\n");
+								g_pVGuiLocalize->ConstructString_safe(sIDString, L"%s1 (%s2%)", 2, CEconItemLocalizedFullNameGenerator(GLocalizationProvider(), pDroppedEconItem->GetItemDefinition(), false, pDroppedEconItem->GetItemQuality()).GetFullName(), wszChargeLevel);
+							}
+								
 						}
 						else
 						{
-							g_pVGuiLocalize->ConstructString_safe( sIDString, L"%s1", 1, CEconItemLocalizedFullNameGenerator( GLocalizationProvider(), pDroppedEconItem->GetItemDefinition(), pDroppedEconItem->GetItemQuality() ).GetFullName() );
+							if (GetPaintKitDefIndex(pDroppedEconItem, &unPaintKitIndexNum))
+								g_pVGuiLocalize->ConstructString_safe( sIDString, L"%s1", 1, CEconItemLocalizedFullNameGenerator( GLocalizationProvider(), pDroppedEconItem->GetItemDefinition(), false, pDroppedEconItem->GetItemQuality(), unPaintKitIndexNum ).GetFullName());
+							else
+								g_pVGuiLocalize->ConstructString_safe(sIDString, L"%s1", 1, CEconItemLocalizedFullNameGenerator( GLocalizationProvider(), pDroppedEconItem->GetItemDefinition(), false, pDroppedEconItem->GetItemQuality() ).GetFullName());
 						}
 
 						locchar_t wszPlayerName [128];
@@ -969,7 +984,7 @@ void CTargetID::UpdateID( void )
 							vgui::IScheme *pScheme = vgui::scheme()->GetIScheme( GetScheme() );
 							if ( pScheme )
 							{
-								const char* pszColorName = GetItemSchema()->GetRarityColor( pDroppedEconItem->GetItemDefinition()->GetRarity() );
+								const char* pszColorName = GetItemSchema()->GetRarityColor( pDroppedEconItem->GetRarity() );
 								pszColorName = pszColorName ? pszColorName : "TanLight";
 								colorName = pScheme->GetColor( pszColorName, Color( 255, 255, 255, 255 ) );
 							}
