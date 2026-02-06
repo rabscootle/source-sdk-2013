@@ -331,7 +331,7 @@ private:
 	vgui::ImagePanel	*m_pIsStrangeImage;
 	vgui::ImagePanel	*m_pIsUnusualImage;
 	vgui::ImagePanel	*m_pIsLoanerImage;
-	vgui::ImagePanel	*m_pIsKillstreakImage;	// New addition for Killstreak tiers
+	vgui::ImagePanel	*m_pIsKillstreakImage;	// Basic Killstreak icon
 	vgui::Label			*m_pSeriesLabel;
 	vgui::Label			*m_pMatchesLabel;
 	vgui::EditablePanel *m_pMainContentContainer;
@@ -369,6 +369,8 @@ private:
 	static eLoadingType_t se_CurrentLoadingTask;
 	CUtlMap< attrib_definition_index_t, int > m_mapMatchingAttributes;
 	CItemMaterialCustomizationIconPanel	*m_pPaintIcon;
+	CItemMaterialCustomizationIconPanel *m_pKillstreakIcon_Tier2; // Specialized Killstreak icon
+	CItemMaterialCustomizationIconPanel *m_pKillstreakIcon_Tier3; // Professional Killstreak icon
 	vgui::ScalableImagePanel	*m_pTF2Icon;
 
 	CItemModelPanel *m_pContainedItemPanel;

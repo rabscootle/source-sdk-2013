@@ -1374,6 +1374,8 @@ CItemModelPanel::CItemModelPanel( vgui::Panel *parent, const char *name ) : vgui
 	m_pIsUnusualImage = NULL;
 	m_pIsLoanerImage = NULL;
 	m_pIsKillstreakImage = NULL;
+	m_pKillstreakIcon_Tier2 = NULL;
+	m_pKillstreakIcon_Tier3 = NULL;
 	m_pSeriesLabel = NULL;
 	m_pMainContentContainer = NULL;
 	m_pLoadingSpinner = NULL;
@@ -1446,7 +1448,9 @@ void CItemModelPanel::ApplySchemeSettings( vgui::IScheme *pScheme )
 	m_pIsStrangeImage = NULL;
 	m_pIsUnusualImage = NULL;
 	m_pIsLoanerImage = NULL;
-	m_pIsKillstreakImage = NULL;
+	m_pIsKillstreakImage = NULL; // Additions for Killstreak icon support
+	m_pKillstreakIcon_Tier2 = NULL;
+	m_pKillstreakIcon_Tier3 = NULL;
 	m_pSeriesLabel = NULL;
 	m_pMatchesLabel = NULL;
 	m_pPaintIcon = NULL;
@@ -1644,6 +1648,21 @@ void CItemModelPanel::LoadResFileForCurrentItem( bool bForceLoad )
 	{
 		m_pTF2Icon->SetMouseInputEnabled( false );
 	}
+
+	
+	m_pKillstreakIcon_Tier2 = dynamic_cast<CItemMaterialCustomizationIconPanel*>( FindChildByName("is_killstreak_icon_color", true));
+	if (m_pKillstreakIcon_Tier2)
+	{
+		m_pKillstreakIcon_Tier2->SetMouseInputEnabled(false);
+
+	}
+	m_pKillstreakIcon_Tier3 = dynamic_cast<CItemMaterialCustomizationIconPanel*>(FindChildByName("is_killstreak_icon_color", true));
+	if (m_pKillstreakIcon_Tier3)
+	{
+		m_pKillstreakIcon_Tier3->SetMouseInputEnabled(false);
+
+	}
+	
 
 	if ( m_bContainedItem )
 	{
@@ -1957,6 +1976,16 @@ void CItemModelPanel::PerformLayout( void )
 	{
 		m_pIsKillstreakImage->SetPos(xpos - m_pIsKillstreakImage->GetWide(), ypos);
 		ypos += m_pIsKillstreakImage->GetTall() * 0.9;
+	}
+	if (m_pKillstreakIcon_Tier2 && m_pKillstreakIcon_Tier2->IsVisible())
+	{
+		m_pKillstreakIcon_Tier2->SetPos(xpos - m_pKillstreakIcon_Tier2->GetWide(), ypos);
+		ypos += m_pKillstreakIcon_Tier2->GetTall() * 0.9;
+	}
+	if (m_pKillstreakIcon_Tier3 && m_pKillstreakIcon_Tier3->IsVisible())
+	{
+		m_pKillstreakIcon_Tier3->SetPos(xpos - m_pKillstreakIcon_Tier3->GetWide(), ypos);
+		ypos += m_pKillstreakIcon_Tier3->GetTall() * 0.9;
 	}
 	if ( m_pIsLoanerImage && m_pIsLoanerImage->IsVisible() )
 	{
@@ -2992,6 +3021,14 @@ void CItemModelPanel::HideAllModifierIcons()
 	{
 		m_pIsKillstreakImage->SetVisible(false);
 	}
+	if (m_pKillstreakIcon_Tier2)
+	{
+		m_pKillstreakIcon_Tier2->SetVisible( false );
+	}
+	if (m_pKillstreakIcon_Tier3)
+	{
+		m_pKillstreakIcon_Tier3->SetVisible( false );
+	}
 	if ( m_pSeriesLabel )
 	{
 		m_pSeriesLabel->SetVisible( false );
@@ -3176,6 +3213,41 @@ void CItemModelPanel::UpdatePanels( void )
 		}
 	}
 
+	/*
+	if (m_pPaintIcon)
+	{
+		m_pPaintIcon->SetVisible(false);
+		if (!m_bHideModel && !m_bHidePaintIcon)
+		{
+			// Empty out our list of paint colors. We may or may not put things back in -- an empty
+			// list at the end means "don't draw the paint icon".
+			m_pPaintIcon->m_colPaintColors.RemoveAll();
+
+			// Fetch custom texture, if any
+			m_pPaintIcon->m_hUGCId = m_ItemData.GetCustomUserTextureID();
+			if (m_pPaintIcon->m_hUGCId != 0)
+				m_pPaintIcon->SetVisible(true);
+
+			// Don't show paint icons on any tools, their icon contains the color
+			const bool bIsEconTool = m_ItemData.GetItemDefinition()->IsTool();
+
+			// Has the item been painted?
+			int iRGB0 = m_ItemData.GetModifiedRGBValue(false),
+				iRGB1 = m_ItemData.GetModifiedRGBValue(true);
+
+			if (!bIsEconTool && (iRGB0 != 0 || iRGB1 != 0))
+			{
+				m_pPaintIcon->SetVisible(true);
+				m_pPaintIcon->m_colPaintColors.AddToTail(Color(clamp((iRGB0 & 0xFF0000) >> 16, 0, 255), clamp((iRGB0 & 0xFF00) >> 8, 0, 255), clamp((iRGB0 & 0xFF), 0, 255), 255));
+				if (iRGB0 != iRGB1)
+				{
+					m_pPaintIcon->m_colPaintColors.AddToTail(Color(clamp((iRGB1 & 0xFF0000) >> 16, 0, 255), clamp((iRGB1 & 0xFF00) >> 8, 0, 255), clamp((iRGB1 & 0xFF), 0, 255), 255));
+				}
+			}
+		}
+	}
+	*/
+
 	if ( m_pTF2Icon )
 	{
 		if ( m_bHideModel || m_bHidePaintIcon )
@@ -3343,7 +3415,7 @@ void CItemModelPanel::UpdatePanels( void )
 			{
 				if ( GetStattrak( &m_ItemData ) )
 				{
-					m_pIsStrangeImage->SetImage( "viewmode_strange" );
+					m_pIsStrangeImage->SetImage( "viewmode_statclock" );
 				}
 				else
 				{
@@ -3382,9 +3454,16 @@ void CItemModelPanel::UpdatePanels( void )
 		}
 	}
 
-	//	NEW: Killstreak (icon will change based on tier)
-	if ( m_pIsKillstreakImage )
+	if ( m_pIsKillstreakImage || m_pKillstreakIcon_Tier2 || m_pKillstreakIcon_Tier3 )
 	{
+		// TODO - Need to find a way to identify if item is KS Tier 1, 2, 3.
+		if (m_pIsKillstreakImage)
+			m_pIsKillstreakImage->SetVisible(false);
+		if (m_pKillstreakIcon_Tier2)
+			m_pKillstreakIcon_Tier2->SetVisible(false);
+		if (m_pKillstreakIcon_Tier3)
+			m_pKillstreakIcon_Tier3->SetVisible(false);
+
 		static CSchemaAttributeDefHandle pAttrDef_KillStreak("killstreak tier");
 		uint32 nKillStreakValue;
 
@@ -3404,14 +3483,39 @@ void CItemModelPanel::UpdatePanels( void )
 				nKillStreakValue = 2;	// specialized
 			}
 
-			if (nKillStreakValue > 0)
-			{
-				m_pIsKillstreakImage->SetImage("viewmode_streak");
-				m_pIsKillstreakImage->SetVisible(true);
-			}
+			const locchar_t* pKillStreakLocalizedString = NULL;
 
+			// All tier-1 killstreaks have idle effect 1
+			if (nKillStreakValue == 1)
+			{
+				//Msg("FOUND BASIC KILLSTREAK\n");
+				if (m_pIsKillstreakImage)
+				{
+					m_pIsKillstreakImage->SetImage("viewmode_streak");
+					m_pIsKillstreakImage->SetVisible(true);
+				}
+			}
+			else if (nKillStreakValue == 2)
+			{
+				//Msg("FOUND SPECIALIZED KILLSTREAK\n");
+				if (m_pIsKillstreakImage)
+				{
+					m_pIsKillstreakImage->SetImage("viewmode_strange");
+					m_pIsKillstreakImage->SetVisible(true);
+				}
+			}
+			else // Tier-2's are things above 1
+			{
+				//Msg("FOUND PROFESSIONAL KILLSTREAK\n");
+				if (m_pIsKillstreakImage)
+				{
+					m_pIsKillstreakImage->SetImage("viewmode_unusual");
+					m_pIsKillstreakImage->SetVisible(true);
+				}
+			}
 		}
 	}
+
 
 
 	InvalidateLayout();
