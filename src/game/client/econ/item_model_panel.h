@@ -89,7 +89,8 @@ public:
 	void CItemMaterialCustomizationIconPanel::PaintKillstreakIcon( const Color& tintColor );
 
 	int m_iPaintSplat;
-	int m_iKillstreakIcon;
+	int m_iKillstreakIcon_Tier2;  // Texture for tier 2
+	int m_iKillstreakIcon_Tier3;  // Texture for tier 3
 	int m_iKillstreakTier;
 
 	// UGC file of custom texture we are using.  0 in the more common case of none.
@@ -374,7 +375,9 @@ private:
 	static eLoadingType_t se_CurrentLoadingTask;
 	CUtlMap< attrib_definition_index_t, int > m_mapMatchingAttributes;
 	CItemMaterialCustomizationIconPanel	*m_pPaintIcon;
-	CItemMaterialCustomizationIconPanel *m_pKillstreakIcon; // Specialized/Professional Killstreak icons
+	CItemMaterialCustomizationIconPanel *m_pIsKillstreakImage_Tier2; // Specialized/Professional Killstreak icons
+	CItemMaterialCustomizationIconPanel* m_pIsKillstreakImage_Tier3; // Tier 3 - Professional (eyeballs)
+
 	vgui::ScalableImagePanel	*m_pTF2Icon;
 
 	CItemModelPanel *m_pContainedItemPanel;
