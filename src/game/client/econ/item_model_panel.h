@@ -85,7 +85,12 @@ public:
 	virtual void PaintBackground( void );
 	void DrawQuad( int iSubtileIndex, int iSubtileCount );
 
+	void CItemMaterialCustomizationIconPanel::SetKillstreakTier( int tier );
+	void CItemMaterialCustomizationIconPanel::PaintKillstreakIcon( const Color& tintColor );
+
 	int m_iPaintSplat;
+	int m_iKillstreakIcon;
+	int m_iKillstreakTier;
 
 	// UGC file of custom texture we are using.  0 in the more common case of none.
 	uint64 m_hUGCId;
@@ -369,8 +374,7 @@ private:
 	static eLoadingType_t se_CurrentLoadingTask;
 	CUtlMap< attrib_definition_index_t, int > m_mapMatchingAttributes;
 	CItemMaterialCustomizationIconPanel	*m_pPaintIcon;
-	CItemMaterialCustomizationIconPanel *m_pKillstreakIcon_Tier2; // Specialized Killstreak icon
-	CItemMaterialCustomizationIconPanel *m_pKillstreakIcon_Tier3; // Professional Killstreak icon
+	CItemMaterialCustomizationIconPanel *m_pKillstreakIcon; // Specialized/Professional Killstreak icons
 	vgui::ScalableImagePanel	*m_pTF2Icon;
 
 	CItemModelPanel *m_pContainedItemPanel;
