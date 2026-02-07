@@ -422,6 +422,7 @@ private:
 	CPanelAnimationVarAliasType( int, m_iTextXPosCollection, "text_xpos_collection", "0", "proportional_int" );
 	CPanelAnimationVar( bool, m_bHideCollectionPanel, "hide_collection_panel", "0" );
 	CPanelAnimationVar( bool, m_bHideModifierIcons, "hide_modifier_icons", "0" );
+	CPanelAnimationVar(bool, m_bHideKillstreakIcon, "killstreak_icon_hide", "0");
 
 	bool m_bFakeButton;
 

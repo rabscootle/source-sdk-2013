@@ -3472,6 +3472,10 @@ void CItemModelPanel::UpdatePanels( void )
 		if (m_pKillstreakIcon)
 			m_pKillstreakIcon->SetVisible(false);
 
+		// Check if we should hide killstreak icons
+		if (m_bHideModifierIcons || m_bHideKillstreakIcon)  // ADD m_bHideKillstreakIcon check
+			return;
+
 		static CSchemaAttributeDefHandle pAttrDef_KillStreak("killstreak tier");
 		uint32 nKillStreakValue;
 		uint32 nKillStreakColorIndex;
