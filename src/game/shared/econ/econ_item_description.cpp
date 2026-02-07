@@ -711,11 +711,13 @@ static void GenerateLocalizedFullItemName
 			pKillStreakLocalizedString = pLocalizationProvider->Find( "ItemNameKillStreakv2" );
 		}
 
-		if ( pKillStreakLocalizedString )
+		bool bIsTool = pEconItem->GetItemDefinition()->GetItemClass() && !Q_strcmp(pEconItem->GetItemDefinition()->GetItemClass(), "tool");
+
+		if ( pKillStreakLocalizedString && bIsTool)
 		{
-			//loc_scpy_safe( szKillStreak, pKillStreakLocalizedString );
+			loc_scpy_safe( szKillStreak, pKillStreakLocalizedString );
 			//  If we're appending some sort of killstreak identifier, dont use the proper name
-			//bUseProperName = false;
+			bUseProperName = false;
 		}
 	}
 
