@@ -2033,17 +2033,15 @@ void CItemModelPanel::PerformLayout( void )
 	if (m_pIsKillstreakImage_Tier2 && m_pIsKillstreakImage_Tier2->IsVisible())
 	{
 		m_pIsKillstreakImage_Tier2->SetPos(xpos - m_pIsKillstreakImage_Tier2->GetWide(), ypos);
-		ypos += m_pIsKillstreakImage_Tier2->GetTall() * 0.9;
+	}
+	if (m_pIsKillstreakImage_Tier3 && m_pIsKillstreakImage_Tier3->IsVisible())
+	{
+		m_pIsKillstreakImage_Tier3->SetPos(xpos - m_pIsKillstreakImage_Tier3->GetWide(), ypos);
 	}
 	if (m_pIsKillstreakImage && m_pIsKillstreakImage->IsVisible())
 	{
 		m_pIsKillstreakImage->SetPos(xpos - m_pIsKillstreakImage->GetWide(), ypos);
 		ypos += m_pIsKillstreakImage->GetTall() * 0.9;
-	}
-	if (m_pIsKillstreakImage_Tier3 && m_pIsKillstreakImage_Tier3->IsVisible())
-	{
-		m_pIsKillstreakImage_Tier3->SetPos(xpos - m_pIsKillstreakImage_Tier3->GetWide(), ypos);
-		ypos += m_pIsKillstreakImage_Tier3->GetTall() * 0.9;
 	}
 	if ( m_pIsLoanerImage && m_pIsLoanerImage->IsVisible() )
 	{
