@@ -183,6 +183,7 @@ CEmbeddedItemModelPanel::CEmbeddedItemModelPanel( vgui::Panel *pParent, const ch
 
 	m_bUsePedestal = false;
 	m_bOfflineIconGeneration = false;
+	m_bStatTrackOnlyPreview = false;
 
 	m_pItemParticle = NULL;
 
@@ -273,6 +274,7 @@ void CEmbeddedItemModelPanel::SetItem( CEconItemView *pItem )
 	m_AttachedModels.Purge();
 
 	m_iCameraAttachment = -1;
+	m_bStatTrackOnlyPreview = false;
 
 	m_pItem = pItem;
 
@@ -1327,6 +1329,11 @@ void CEmbeddedItemModelPanel::RenderingRootModel( IMatRenderContext *pRenderCont
 //-----------------------------------------------------------------------------
 IMaterial *CEmbeddedItemModelPanel::GetOverrideMaterial( MDLHandle_t mdlHandle )
 {
+	// The root weapon is retained only to provide bones for the Stat Clock's
+	// bonemerge. Hide its draw while RenderStatTrack() remains unaffected.
+	if ( m_bStatTrackOnlyPreview && mdlHandle == m_RootMDL.m_MDL.GetMDL() )
+		return materials->FindMaterial( "debug/debugempty", TEXTURE_GROUP_OTHER );
+
 	// This matches the check in RenderingRootModel, if we're not on a pedestal
 	// then we expect mdlHandle to not match m_ItemModel and that's fine--we should
 	// just get the override from the m_pItem
@@ -2312,6 +2319,30 @@ void CItemModelPanel::SetItem( const CEconItemView *pItem )
 	}
 
 	// TODO: Update only description for strange item in the same panel
+}
+
+void CEmbeddedItemModelPanel::SetPreviewModel( const char *pszModel, void *pProxyData )
+{
+	if ( !pszModel || !pszModel[0] )
+		return;
+
+	// Stat Clock modules are bonemerge models. They require the weapon skeleton
+	// and cannot render correctly as standalone root MDLs. Keep the root for its
+	// bones, hide its materials, and use the existing RenderStatTrack() path.
+	m_bStatTrackOnlyPreview = true;
+	m_AttachedModels.Purge();
+	SetForceModelUsage( true );
+}
+
+// Render a specific model while retaining this panel's item as material-proxy
+// data. Stat Clock selection uses this to preview only the clock module while
+// its digit/icon proxies still read the weapon's Strange attributes.
+void CItemModelPanel::SetPreviewModel( const char *pszModel )
+{
+	if ( !m_pModelPanel || !pszModel || !pszModel[0] )
+		return;
+
+	m_pModelPanel->SetPreviewModel( pszModel, static_cast<IClientRenderable *>( &m_ItemData ) );
 }
 
 //-----------------------------------------------------------------------------

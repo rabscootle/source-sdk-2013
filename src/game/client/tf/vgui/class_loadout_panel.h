@@ -40,12 +40,14 @@ public:
 private:
 
 	void AddControlsParticleEffect( void ) const;
+	void AddControlsStatTrakDisplay( void ) const;
 	void AddControlsSetStyle( void ) const;
 	CEconItemView* GetItem( void ) const;
 
 	class vgui::PanelListPanel	*m_pListPanel;
 	CCvarSlider					*m_pHatParticleSlider;
 	CExButton					*m_pSetStyleButton;
+	CExButton					*m_pStatTrakDisplayButton;
 	vgui::CheckButton			*m_pHatParticleUseHeadButton;
 
 	int						m_iCurrentClassIndex;

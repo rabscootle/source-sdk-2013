@@ -8,6 +8,7 @@
 #include "cbase.h"
 #include "class_loadout_panel.h"
 #include "c_tf_player.h"
+#include "tf_weaponbase.h"
 #include "vgui_controls/CheckButton.h"
 #include "econ_gcmessages.h"
 #include "gc_clientsystem.h"
@@ -213,6 +214,11 @@ CLoadoutItemOptionsPanel::CLoadoutItemOptionsPanel( Panel *parent, const char *p
 	m_pHatParticleUseHeadButton->AddActionSignalTarget( this );
 	m_pSetStyleButton = new CExButton( m_pListPanel, "SetStyleButton", "#TF_Item_SelectStyle" );
 	m_pSetStyleButton->AddActionSignalTarget( this );
+	// ===== BEGIN STAT CLOCK ENHANCEMENT: LOADOUT CYCLE CONTROL =====
+	m_pStatTrakDisplayButton = new CExButton( m_pListPanel, "StatTrakDisplayButton", "Select Stat Clock Counter" );
+	m_pStatTrakDisplayButton->SetCommand( "select_stattrak_display" );
+	m_pStatTrakDisplayButton->AddActionSignalTarget( this );
+	// ===== END STAT CLOCK ENHANCEMENT: LOADOUT CYCLE CONTROL =====
 }
 
 //-----------------------------------------------------------------------------
@@ -266,6 +272,110 @@ void CLoadoutItemOptionsPanel::OnCommand( const char *command )
 			pStyle->Show();
 		}
 	}
+	else if ( FStrEq( command, "select_stattrak_display" ) )
+	{
+		CEconItemView *pItem = GetItem();
+		if ( pItem && GetStattrak( pItem ) )
+		{
+			CStatTrakSelectDialog *pDialog = vgui::SETUP_PANEL( new CStatTrakSelectDialog( GetParent(), pItem ) );
+			if ( pDialog )
+				pDialog->Show();
+		}
+		return;
+	}
+	// ===== BEGIN STAT CLOCK ENHANCEMENT: CYCLE DISPLAYED COUNTER =====
+	else if ( FStrEq( command, "cycle_stattrak_display" ) )
+	{
+		Msg( "[StatClock] Cycle button clicked\n" );
+
+		CEconItemView *pItem = GetItem();
+		if ( !pItem || !GetStattrak( pItem ) )
+		{
+			Warning( "[StatClock] Cycle failed: selected item has no attached Stat Clock\n" );
+			return;
+		}
+
+		static CSchemaAttributeDefHandle pAttrDef_StatTrakDisplayOverride( "stattrak display override" );
+		if ( !pAttrDef_StatTrakDisplayOverride )
+		{
+			Warning( "[StatClock] Cycle failed: item schema has no 'stattrak display override' attribute definition\n" );
+			return;
+		}
+
+		uint32 unCurrentSlot = 0;
+		pItem->FindAttribute( pAttrDef_StatTrakDisplayOverride, &unCurrentSlot );
+		int iCurrentSlot = unCurrentSlot < (uint32)GetKillEaterAttrCount() ? (int)unCurrentSlot : 0;
+
+		// Show exactly which physical slots this item contains. Applied Strange
+		// Parts normally occupy the user slots (3-5), so those numbers are valid.
+		Msg( "[StatClock] Valid counter slots:" );
+		for ( int i = 0; i < GetKillEaterAttrCount(); i++ )
+		{
+			if ( BIsValidKillEaterSlotForItem( pItem, i ) )
+				Msg( " %d", i );
+		}
+		Msg( "\n" );
+
+		// Starting after the current slot, choose the next slot containing a real
+		// counter. Alternate slots require both score and score-type attributes.
+		int iNextSlot = iCurrentSlot;
+		for ( int i = 0; i < GetKillEaterAttrCount(); i++ )
+		{
+			iNextSlot = ( iNextSlot + 1 ) % GetKillEaterAttrCount();
+			if ( BIsValidKillEaterSlotForItem( pItem, iNextSlot ) )
+				break;
+		}
+
+		// Prototype only: apply an integer attribute to this client-side item
+		// view. A future GC message must persist this value on the real item.
+		pItem->GetAttributeList()->RemoveAttribute( pAttrDef_StatTrakDisplayOverride );
+		CEconItemAttribute displayOverride( pAttrDef_StatTrakDisplayOverride->GetDefinitionIndex(), (uint32)iNextSlot );
+		pItem->GetAttributeList()->AddAttribute( &displayOverride );
+
+		uint32 unInventoryReadback = 0;
+		bool bInventoryReadback = pItem->FindAttribute( pAttrDef_StatTrakDisplayOverride, &unInventoryReadback );
+		Msg(
+			"[StatClock] Inventory override readback: found=%s slot=%u\n",
+			bInventoryReadback ? "yes" : "no",
+			unInventoryReadback
+		);
+
+		// The equipped weapon has a separate CEconItemView from the inventory UI.
+		// Mirror the prototype attribute there so the in-world material proxies
+		// immediately receive the same counter selection.
+		C_TFPlayer *pLocalPlayer = C_TFPlayer::GetLocalTFPlayer();
+		CTFWeaponBase *pEquippedWeapon = pLocalPlayer
+			? dynamic_cast<CTFWeaponBase *>( pLocalPlayer->GetEntityForLoadoutSlot( m_eItemSlot ) )
+			: NULL;
+		if ( pEquippedWeapon )
+		{
+			CEconItemView *pEquippedItem = pEquippedWeapon->GetAttributeContainer()->GetItem();
+			if ( pEquippedItem )
+			{
+				pEquippedItem->GetAttributeList()->RemoveAttribute( pAttrDef_StatTrakDisplayOverride );
+				CEconItemAttribute equippedOverride( pAttrDef_StatTrakDisplayOverride->GetDefinitionIndex(), (uint32)iNextSlot );
+				pEquippedItem->GetAttributeList()->AddAttribute( &equippedOverride );
+
+				uint32 unEquippedReadback = 0;
+				bool bEquippedReadback = pEquippedItem->FindAttribute( pAttrDef_StatTrakDisplayOverride, &unEquippedReadback );
+				Msg(
+					"[StatClock] Equipped override readback: found=%s slot=%u\n",
+					bEquippedReadback ? "yes" : "no",
+					unEquippedReadback
+				);
+			}
+		}
+		else
+		{
+			Warning( "[StatClock] No live equipped weapon found for loadout slot %d\n", m_eItemSlot );
+		}
+
+		Msg( "[StatClock] Display counter changed to Kill Eater slot %d\n", iNextSlot );
+		g_pClassLoadoutPanel->UpdateModelPanels();
+		UpdateItemOptionsUI();
+		return;
+	}
+	// ===== END STAT CLOCK ENHANCEMENT: CYCLE DISPLAYED COUNTER =====
 }
 
 //-----------------------------------------------------------------------------
@@ -323,6 +433,7 @@ void CLoadoutItemOptionsPanel::UpdateItemOptionsUI()
 
 	// Add controls for various item options
 	AddControlsParticleEffect();
+	AddControlsStatTrakDisplay();
 	AddControlsSetStyle();
 
 	// Bail if no controls added
@@ -341,6 +452,19 @@ void CLoadoutItemOptionsPanel::UpdateItemOptionsUI()
 	m_pListPanel->SetTall( nNewTall );
 	SetTall( nNewTall );
 	InvalidateLayout( true, false );
+}
+
+//-----------------------------------------------------------------------------
+void CLoadoutItemOptionsPanel::AddControlsStatTrakDisplay( void ) const
+{
+	m_pStatTrakDisplayButton->SetVisible( false );
+
+	CEconItemView *pItem = GetItem();
+	if ( pItem && GetStattrak( pItem ) )
+	{
+		m_pStatTrakDisplayButton->SetVisible( true );
+		m_pListPanel->AddItem( NULL, m_pStatTrakDisplayButton );
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -1136,6 +1260,11 @@ bool CClassLoadoutPanel::AnyOptionsAvailableForItem( const CEconItemView *pItem 
 	// Unusual particle effect! For Cosmetics only
 	static CSchemaAttributeDefHandle pAttrDef_AttachParticleEffect( "attach particle effect" );
 	if ( pItem->FindAttribute( pAttrDef_AttachParticleEffect ) && pItem->GetItemDefinition()->GetLoadoutSlot( 0 ) >= LOADOUT_POSITION_HEAD )
+		return true;
+
+	// Stat Clock display selection. GetStattrak() specifically requires the
+	// attached Stat Clock module, so an ordinary Strange weapon is not enough.
+	if ( GetStattrak( pItem ) )
 		return true;
 
 	return false;

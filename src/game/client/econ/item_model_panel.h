@@ -114,6 +114,7 @@ public:
 	
 	CEconItemView*	GetItem() const { return m_pItem; }
 	void			SetItem( CEconItemView *pItem );
+	void			SetPreviewModel( const char *pszModel, void *pProxyData );
 	bool			IsForcingModelUsage( void ) { return m_bForceUseModel; }
 	void			SetForceModelUsage( bool bUseModel ) { m_bForceUseModel = bUseModel; }
 	bool			IsImageNotLoaded( void ) const;
@@ -135,6 +136,7 @@ public:
 
 	ITexture				*GetCachedGeneratedIcon();
 	bool					m_bOfflineIconGeneration;
+	bool					m_bStatTrackOnlyPreview;
 
 private:
 	bool					ShouldUseRenderTargetAsIcon() const;
@@ -273,6 +275,7 @@ public:
 
 	void	SetSkin( int iSkin );
 	void	SetItemStyle( style_index_t unStyle ) { m_ItemData.SetItemStyleOverride( unStyle ); }
+	void	SetPreviewModel( const char *pszModel );
 	void	SetNameOnly( bool bNameOnly ) { m_bNameOnly = bNameOnly; }
 	void	SetSpecialAttributesOnly( bool bSpecialOnly ) { m_bSpecialAttributesOnly = bSpecialOnly; }
 

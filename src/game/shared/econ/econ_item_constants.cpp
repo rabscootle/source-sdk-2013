@@ -618,6 +618,20 @@ bool GetKilleaterValueByEvent( const IEconItemInterface* pItem, const kill_eater
 	return false;
 }
 
+// A selectable Stat Clock counter must have a score. Alternate slots must also
+// have a score-type attribute; only slot 0 may legally omit its type because
+// the legacy default for that slot is player kills.
+bool BIsValidKillEaterSlotForItem( const IEconItemInterface *pItem, int iSlot )
+{
+	if ( !pItem || iSlot < 0 || iSlot >= GetKillEaterAttrCount() )
+		return false;
+
+	if ( !pItem->FindAttribute( GetKillEaterAttr_Score( iSlot ) ) )
+		return false;
+
+	return iSlot == 0 || pItem->FindAttribute( GetKillEaterAttr_Type( iSlot ) );
+}
+
 // Does this thing have kill eater
 bool BIsItemStrange( const IEconItemInterface *pItem )
 {

@@ -207,3 +207,102 @@ void CStyleSelectDialog::OnComboBoxChanged( int iNewSelection )
 	GetPreviewModelPanel()->SetItemStyle( GetComboBox()->GetActiveItem() );
 	GetPreviewModelPanel()->UpdatePanels();
 }
+
+// ===== BEGIN STAT CLOCK ENHANCEMENT: COUNTER SELECT DIALOG =====
+static bool SetStatTrakDisplayOverrideOnItemView( CEconItemView *pItem, int iSlot )
+{
+	if ( !pItem || !BIsValidKillEaterSlotForItem( pItem, iSlot ) )
+		return false;
+
+	static CSchemaAttributeDefHandle pAttrDef_StatTrakDisplayOverride( "stattrak display override" );
+	if ( !pAttrDef_StatTrakDisplayOverride )
+		return false;
+
+	pItem->GetAttributeList()->RemoveAttribute( pAttrDef_StatTrakDisplayOverride );
+	CEconItemAttribute displayOverride( pAttrDef_StatTrakDisplayOverride->GetDefinitionIndex(), (uint32)iSlot );
+	pItem->GetAttributeList()->AddAttribute( &displayOverride );
+	return true;
+}
+
+void CStatTrakSelectDialog::PopulateComboBoxOptions()
+{
+	CEconItemView *pItem = GetPreviewModelPanel()->GetItem();
+	if ( !pItem )
+		return;
+
+	uint32 unCurrentSlot = 0;
+	static CSchemaAttributeDefHandle pAttrDef_StatTrakDisplayOverride( "stattrak display override" );
+	if ( pAttrDef_StatTrakDisplayOverride )
+		pItem->FindAttribute( pAttrDef_StatTrakDisplayOverride, &unCurrentSlot );
+
+	int iSelectedRow = 0;
+	int iRow = 0;
+	for ( int i = 0; i < GetKillEaterAttrCount(); i++ )
+	{
+		if ( !BIsValidKillEaterSlotForItem( pItem, i ) )
+			continue;
+
+		uint32 unEventType = kKillEaterEvent_PlayerKill;
+		float flEventType;
+		if ( FindAttribute_UnsafeBitwiseCast<attrib_value_t>( pItem, GetKillEaterAttr_Type( i ), &flEventType ) )
+			unEventType = (uint32)flEventType;
+
+		const char *pszTypeLocKey = GetItemSchema()->GetKillEaterScoreTypeLocString( unEventType );
+		const locchar_t *pCounterName = pszTypeLocKey ? GLocalizationProvider()->Find( pszTypeLocKey ) : NULL;
+		if ( !pCounterName )
+			continue;
+
+		KeyValues *pData = new KeyValues( "data" );
+		pData->SetInt( "counter_slot", i );
+		GetComboBox()->AddItem( pCounterName, pData );
+		pData->deleteThis();
+
+		if ( i == (int)unCurrentSlot )
+			iSelectedRow = iRow;
+		iRow++;
+	}
+
+	if ( GetComboBox()->GetItemCount() <= 0 )
+		return;
+
+	GetComboBox()->ActivateItemByRow( iSelectedRow );
+	KeyValues *pActiveData = GetComboBox()->GetActiveItemUserData();
+	if ( pActiveData )
+		UpdatePreviewForSlot( pActiveData->GetInt( "counter_slot", 0 ) );
+}
+
+void CStatTrakSelectDialog::UpdatePreviewForSlot( int iSlot )
+{
+	CEconItemView *pPreviewItem = GetPreviewModelPanel()->GetItem();
+	if ( !SetStatTrakDisplayOverrideOnItemView( pPreviewItem, iSlot ) )
+		return;
+
+	CAttribute_String attrModule;
+	if ( GetStattrak( pPreviewItem, &attrModule ) )
+		GetPreviewModelPanel()->SetPreviewModel( attrModule.value().c_str() );
+}
+
+void CStatTrakSelectDialog::OnComboBoxChanged( int iNewSelection )
+{
+	KeyValues *pData = GetComboBox()->GetActiveItemUserData();
+	if ( pData )
+		UpdatePreviewForSlot( pData->GetInt( "counter_slot", 0 ) );
+}
+
+void CStatTrakSelectDialog::OnComboBoxApplication()
+{
+	KeyValues *pData = GetComboBox()->GetActiveItemUserData();
+	int iSlot = pData ? pData->GetInt( "counter_slot", 0 ) : 0;
+	if ( !SetStatTrakDisplayOverrideOnItemView( m_pItem, iSlot ) )
+		return;
+
+	Msg( "[StatClock] Selected Kill Eater display slot %d\n", iSlot );
+
+	if ( m_pItem->IsValid() )
+	{
+		KeyValues *pKey = new KeyValues( "SelectionReturned" );
+		pKey->SetUint64( "itemindex", m_pItem->GetItemID() );
+		PostMessage( GetParent(), pKey );
+	}
+}
+// ===== END STAT CLOCK ENHANCEMENT: COUNTER SELECT DIALOG =====
