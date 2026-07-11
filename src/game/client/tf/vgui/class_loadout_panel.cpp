@@ -255,6 +255,13 @@ void CLoadoutItemOptionsPanel::ApplySchemeSettings( vgui::IScheme *pScheme )
 	// already-resolved font after the resource settings have been applied.
 	m_pStatTrakDisplayHeader->SetFont( m_pSetStyleButton->GetFont() );
 	m_pStatTrakDisplayHeader->SetFgColor( m_pSetStyleButton->GetFgColor() );
+
+	// Dynamically-created controls do not receive the proportional dimensions
+	// from ItemOptionsPanel.res. Reuse the resolved Select Style row height so
+	// the scaled TF Build font cannot overflow its row at high resolutions.
+	const int iOptionRowTall = m_pSetStyleButton->GetTall();
+	m_pStatTrakDisplayHeader->SetTall( iOptionRowTall );
+	m_pStatTrakDisplayComboBox->SetTall( iOptionRowTall );
 	// ===== END STAT CLOCK ENHANCEMENT: HEADER FONT =====
 }
 
@@ -262,6 +269,16 @@ void CLoadoutItemOptionsPanel::ApplySchemeSettings( vgui::IScheme *pScheme )
 void CLoadoutItemOptionsPanel::PerformLayout( void ) 
 {
 	BaseClass::PerformLayout();
+
+	// ===== BEGIN STAT CLOCK ENHANCEMENT: RESOLUTION-SAFE OPTION WIDTH =====
+	// ItemOptionsPanel.res and its dynamically-created children can wind up on
+	// different proportional scales. Size the list from the actual parent width
+	// so its controls and a ComboBox's popup use the same visible dimensions.
+	const int iListX = m_pListPanel->GetXPos();
+	m_pListPanel->SetWide( Max( 0, GetWide() - ( iListX * 2 ) ) );
+	m_pListPanel->InvalidateLayout( true, false );
+	// ===== END STAT CLOCK ENHANCEMENT: RESOLUTION-SAFE OPTION WIDTH =====
+
 	m_pHatParticleSlider->SetTickColor( Color( 235, 226, 202, 255 ) ); // tanlight
 }
 
