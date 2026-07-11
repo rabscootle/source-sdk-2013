@@ -68,23 +68,4 @@ protected:
 	virtual const char *GetTitleLabelLocalizationToken() const { return "#TF_Item_SelectStyle"; }
 };
 
-// Uses the Style Select presentation for choosing which Strange counter a
-// weapon's Stat Clock displays.
-class CStatTrakSelectDialog : public CComboBoxBackpackOverlayDialogBase
-{
-	DECLARE_CLASS_SIMPLE( CStatTrakSelectDialog, CComboBoxBackpackOverlayDialogBase );
-
-public:
-	CStatTrakSelectDialog( vgui::Panel *pParent, CEconItemView *pItem ) : CComboBoxBackpackOverlayDialogBase( pParent, pItem ) { }
-
-protected:
-	virtual void PopulateComboBoxOptions();
-	virtual void OnComboBoxApplication();
-	virtual void OnComboBoxChanged( int iNewSelection );
-	virtual const char *GetTitleLabelLocalizationToken() const { return "SELECT STAT CLOCK COUNTER"; }
-
-private:
-	void UpdatePreviewForSlot( int iSlot );
-};
-
 #endif // ITEM_STYLE_SELECT_DIALOG_H

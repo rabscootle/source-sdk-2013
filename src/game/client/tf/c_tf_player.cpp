@@ -3152,7 +3152,26 @@ static int GetStatClockDisplaySlot( const CEconItemView *pItem )
 		return 0;
 
 	uint32 unDisplaySlot = 0;
-	if ( !pItem->FindAttribute( pAttrDef_StatTrakDisplayOverride, &unDisplaySlot ) )
+	bool bFoundDisplayOverride = pItem->FindAttribute( pAttrDef_StatTrakDisplayOverride, &unDisplaySlot );
+
+	// ===== BEGIN STAT CLOCK ENHANCEMENT: SESSION OVERRIDE RESTORE =====
+	// Respawning creates a fresh weapon item view from the server's inventory
+	// data, which does not contain our client-only prototype attribute. The
+	// loadout inventory view survives for the duration of the client session,
+	// so use the weapon's unique item ID to recover the selected slot from it.
+	if ( !bFoundDisplayOverride && pItem->GetItemID() != INVALID_ITEM_ID )
+	{
+		CTFPlayerInventory *pLocalInventory = TFInventoryManager()->GetLocalTFInventory();
+		CEconItemView *pInventoryItem = pLocalInventory
+			? pLocalInventory->GetInventoryItemByItemID( pItem->GetItemID() )
+			: NULL;
+
+		if ( pInventoryItem )
+			bFoundDisplayOverride = pInventoryItem->FindAttribute( pAttrDef_StatTrakDisplayOverride, &unDisplaySlot );
+	}
+	// ===== END STAT CLOCK ENHANCEMENT: SESSION OVERRIDE RESTORE =====
+
+	if ( !bFoundDisplayOverride )
 		return 0;
 
 	int iDisplaySlot = clamp( (int)unDisplaySlot, 0, GetKillEaterAttrCount() - 1 );
