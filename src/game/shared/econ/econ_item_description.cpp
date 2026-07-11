@@ -480,14 +480,16 @@ CStrangeRankLocalizationGenerator::CStrangeRankLocalizationGenerator( const CLoc
 
 	static CSchemaAttributeDefHandle pAttrDef_StrangeScoreSelector( "strange score selector" );
 
-	// Do we have a strange score selector attribute? If so, the value of this attribute will tell us which strange
-	// attribute we're actually going to use to generate a name. Leaving this value as 0 will fall back to the
-	// default behavior of looking at the base "kill eater" attribute.
-	if ( pEconItem->FindAttribute( pAttrDef_StrangeScoreSelector, &m_unUsedStrangeSlot ) )
-	{
-		// Make sure the value we pulled from the database is within range.
-		m_unUsedStrangeSlot = MIN( m_unUsedStrangeSlot, static_cast<uint32>( GetKillEaterAttrCount() ) );
-	}
+	// ===== BEGIN STAT CLOCK ENHANCEMENT: KEEP DEFAULT STRANGE RANK =====
+	// The Stat Clock override only changes the physical clock display. Preserve
+	// Valve's normal Strange rank selection so changing the clock icon/number
+	// cannot rename or rerank the weapon from an alternate Strange Part.
+	pEconItem->FindAttribute( pAttrDef_StrangeScoreSelector, &m_unUsedStrangeSlot );
+
+	m_unUsedStrangeSlot = MIN( m_unUsedStrangeSlot, static_cast<uint32>( GetKillEaterAttrCount() - 1 ) );
+	if ( !BIsValidKillEaterSlotForItem( pEconItem, (int)m_unUsedStrangeSlot ) )
+		m_unUsedStrangeSlot = 0;
+	// ===== END STAT CLOCK ENHANCEMENT: KEEP DEFAULT STRANGE RANK =====
 
 
 	// Use the strange prefix if the weapon has one.
@@ -1141,6 +1143,28 @@ bool CEconItemDescription::BGenerate_ItemLevelDesc_StrangeNameAndStats( const CL
 	CStrangeRankLocalizationGenerator RankGenerator( pLocalizationProvider, pEconItem, TF_ANTI_IDLEBOT_VERIFICATION_ONLY_ARG_BOOL_TRUE( m_pHashContext == NULL ) );
 	if ( !RankGenerator.IsValid() )
 		return false;
+
+	// ===== BEGIN STAT CLOCK ENHANCEMENT: HIGHLIGHT DISPLAYED COUNTER =====
+	// Use yellow only when an attached Stat Clock has multiple counters to
+	// choose from. An absent override means the clock is displaying slot 0.
+	static CSchemaAttributeDefHandle pAttrDef_StatTrakDisplayOverride( "stattrak display override" );
+	uint32 unStatTrakDisplaySlot = 0;
+	if ( pAttrDef_StatTrakDisplayOverride )
+		pEconItem->FindAttribute( pAttrDef_StatTrakDisplayOverride, &unStatTrakDisplaySlot );
+	bool bHighlightStatTrakDisplaySlot = GetStattrak( pEconItem );
+
+	int iValidStatTrakCounterCount = 0;
+	for ( int iSlot = 0; bHighlightStatTrakDisplaySlot && iSlot < GetKillEaterAttrCount(); ++iSlot )
+	{
+		if ( BIsValidKillEaterSlotForItem( pEconItem, iSlot ) )
+			++iValidStatTrakCounterCount;
+	}
+	bHighlightStatTrakDisplaySlot = bHighlightStatTrakDisplaySlot && iValidStatTrakCounterCount > 1;
+
+	unStatTrakDisplaySlot = MIN( unStatTrakDisplaySlot, (uint32)( GetKillEaterAttrCount() - 1 ) );
+	if ( !BIsValidKillEaterSlotForItem( pEconItem, (int)unStatTrakDisplaySlot ) )
+		bHighlightStatTrakDisplaySlot = false;
+	// ===== END STAT CLOCK ENHANCEMENT: HIGHLIGHT DISPLAYED COUNTER =====
 	
 	// For Collection Items
 	if ( GetPaintKitDefIndex( pEconItem ) )
@@ -1173,7 +1197,7 @@ bool CEconItemDescription::BGenerate_ItemLevelDesc_StrangeNameAndStats( const CL
 				unKillEaterAltScore,
 				GetLocalizedStringForKillEaterTypeAttr( pLocalizationProvider, unKillEaterAltType ),
 				*CStrangeRestrictionAttrWrapper( pLocalizationProvider, GetLocalizedStringForStrangeRestrictionAttr( pLocalizationProvider, pEconItem, i ) ) ),
-				ATTRIB_COL_LEVEL,
+				bHighlightStatTrakDisplaySlot && i == (int)unStatTrakDisplaySlot ? ATTRIB_COL_ITEMSET_NAME : ATTRIB_COL_LEVEL,
 				kDescLineFlag_Misc );		// strange item scores past the first are not considered part of the type
 		}
 
@@ -1196,7 +1220,8 @@ bool CEconItemDescription::BGenerate_ItemLevelDesc_StrangeNameAndStats( const CL
 												RankGenerator.GetRankSecondaryLocalized() ? RankGenerator.GetRankSecondaryLocalized() : LOCCHAR(""), 
 												bLimitedQuantity ? pLocalizationProvider->Find( "LimitedQualityDesc" ) : LOCCHAR("")
 												),
-					bLimitedQuantity ? ATTRIB_COL_LIMITED_QUANTITY : ATTRIB_COL_LEVEL,
+					bHighlightStatTrakDisplaySlot && RankGenerator.GetUsedStrangeSlot() == unStatTrakDisplaySlot ? ATTRIB_COL_ITEMSET_NAME :
+						( bLimitedQuantity ? ATTRIB_COL_LIMITED_QUANTITY : ATTRIB_COL_LEVEL ),
 					kDescLineFlag_Type );
 
 	// Are we tracking alternate stats as well?
@@ -1226,7 +1251,7 @@ bool CEconItemDescription::BGenerate_ItemLevelDesc_StrangeNameAndStats( const CL
 												unKillEaterAltScore,
 												GetLocalizedStringForKillEaterTypeAttr( pLocalizationProvider, unKillEaterAltType ),
 												*CStrangeRestrictionAttrWrapper( pLocalizationProvider, GetLocalizedStringForStrangeRestrictionAttr( pLocalizationProvider, pEconItem, i ) ) ),
-					 ATTRIB_COL_LEVEL,
+					 bHighlightStatTrakDisplaySlot && i == (int)unStatTrakDisplaySlot ? ATTRIB_COL_ITEMSET_NAME : ATTRIB_COL_LEVEL,
 					 kDescLineFlag_Misc );		// strange item scores past the first are not considered part of the type
 	}
 

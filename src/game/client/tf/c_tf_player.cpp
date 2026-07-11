@@ -60,6 +60,7 @@
 #include "tf_proxyentity.h"
 #include "materialsystem/imaterial.h"
 #include "materialsystem/imaterialvar.h"
+#include "materialsystem/itexture.h"
 #include "materialsystem/itexturecompositor.h"
 #include "c_tf_team.h"
 #include "tf_item_inventory.h"
@@ -3117,8 +3118,6 @@ public:
 	virtual bool Init( IMaterial *pMaterial, KeyValues *pKeyValues );
 	virtual void OnBind( void *pC_BaseEntity );
 
-	virtual bool HelperOnBindGetStatTrakScore( void *pC_BaseEntity, int *piScore );
-
 private:
 	CFloatInput	m_flDisplayDigit; // the particular digit we want to display
 	CFloatInput	m_flTrimZeros;
@@ -3139,17 +3138,94 @@ bool CStatTrakDigitProxy::Init( IMaterial *pMaterial, KeyValues *pKeyValues )
 	return true;
 }
 
-bool CStatTrakDigitProxy::HelperOnBindGetStatTrakScore( void *pC_BaseEntity, int *piScore )
+// ===== BEGIN STAT CLOCK ENHANCEMENT: DISPLAY COUNTER OVERRIDE =====
+// "stattrak display override" stores the zero-based Kill Eater attribute slot
+// that both the digit and icon proxies should display. If the attribute is
+// absent, invalid, or points at a counter the item does not have, use slot 0.
+static int GetStatClockDisplaySlot( const CEconItemView *pItem )
+{
+	if ( !pItem )
+		return 0;
+
+	static CSchemaAttributeDefHandle pAttrDef_StatTrakDisplayOverride( "stattrak display override" );
+	if ( !pAttrDef_StatTrakDisplayOverride )
+		return 0;
+
+	uint32 unDisplaySlot = 0;
+	bool bFoundDisplayOverride = pItem->FindAttribute( pAttrDef_StatTrakDisplayOverride, &unDisplaySlot );
+
+	// ===== BEGIN STAT CLOCK ENHANCEMENT: SESSION OVERRIDE RESTORE =====
+	// Respawning creates a fresh weapon item view from the server's inventory
+	// data, which does not contain our client-only prototype attribute. The
+	// loadout inventory view survives for the duration of the client session,
+	// so use the weapon's unique item ID to recover the selected slot from it.
+	if ( !bFoundDisplayOverride && pItem->GetItemID() != INVALID_ITEM_ID )
+	{
+		CTFPlayerInventory *pLocalInventory = TFInventoryManager()->GetLocalTFInventory();
+		CEconItemView *pInventoryItem = pLocalInventory
+			? pLocalInventory->GetInventoryItemByItemID( pItem->GetItemID() )
+			: NULL;
+
+		if ( pInventoryItem )
+			bFoundDisplayOverride = pInventoryItem->FindAttribute( pAttrDef_StatTrakDisplayOverride, &unDisplaySlot );
+	}
+	// ===== END STAT CLOCK ENHANCEMENT: SESSION OVERRIDE RESTORE =====
+
+	if ( !bFoundDisplayOverride )
+		return 0;
+
+	int iDisplaySlot = clamp( (int)unDisplaySlot, 0, GetKillEaterAttrCount() - 1 );
+	if ( !BIsValidKillEaterSlotForItem( pItem, iDisplaySlot ) )
+		iDisplaySlot = 0;
+
+	return iDisplaySlot;
+}
+
+// The score and score type use matching attribute slots. Passing the selected
+// slot here guarantees that the displayed number and atlas icon stay paired.
+static void GetStatClockEventType( const CEconItemView *pItem, int iDisplaySlot, kill_eater_event_t *pEventType )
+{
+	if ( !pItem || !pEventType )
+		return;
+
+	// Player kills are the schema default when the type attribute is absent.
+	*pEventType = kKillEaterEvent_PlayerKill;
+
+	// This attribute uses float-sized econ storage, matching Valve's existing
+	// kill-eater code in econ_item_constants.cpp.
+	float flEventType;
+	if ( FindAttribute_UnsafeBitwiseCast<attrib_value_t>( pItem, GetKillEaterAttr_Type( iDisplaySlot ), &flEventType ) )
+		*pEventType = (kill_eater_event_t)(uint32)flEventType;
+}
+
+// Extract the score and event type together after resolving the override once.
+static bool GetStatClockDataFromItem( const CEconItemView *pItem, int *piScore, kill_eater_event_t *pEventType )
+{
+	if ( !pItem || !piScore || !pEventType )
+		return false;
+
+	int iDisplaySlot = GetStatClockDisplaySlot( pItem );
+	uint32 unScore = 0;
+	if ( !pItem->FindAttribute( GetKillEaterAttr_Score( iDisplaySlot ), &unScore ) )
+		return false;
+
+	*piScore = unScore;
+	GetStatClockEventType( pItem, iDisplaySlot, pEventType );
+	return true;
+}
+// ===== END STAT CLOCK ENHANCEMENT: DISPLAY COUNTER OVERRIDE =====
+
+// This lookup is shared by the digit and icon proxies. Each proxy must call
+// BindArgToEntity() itself because that function is protected by CResultProxy.
+static bool GetStatTrakData( void *pC_BaseEntity, C_BaseEntity *pEntity, int *piScore, kill_eater_event_t *pEventType )
 {
 	if ( !pC_BaseEntity )
 		return false;
 
-	if ( !piScore )
+	if ( !piScore || !pEventType )
 		return false;
 
 	bool bReturnValue = false;
-	uint32 unScore = 0;
-	C_BaseEntity *pEntity = BindArgToEntity( pC_BaseEntity );
 	if ( pEntity )
 	{
 		// StatTrak modules are children of their accompanying viewmodels
@@ -3161,11 +3237,11 @@ bool CStatTrakDigitProxy::HelperOnBindGetStatTrakScore( void *pC_BaseEntity, int
 			CTFWeaponBase *pWeap = dynamic_cast<CTFWeaponBase*>( pViewModel->GetOwnerEntity() );
 			if ( pWeap )
 			{
-				
+				CEconItemView *pItem = pWeap->GetAttributeContainer()->GetItem();
+
 				// Use the strange prefix if the weapon has one.
-				if ( pWeap->GetAttributeContainer()->GetItem()->FindAttribute( GetKillEaterAttr_Score( 0 ), &unScore ) )
+				if ( GetStatClockDataFromItem( pItem, piScore, pEventType ) )
 				{
-					*piScore = unScore;
 					bReturnValue = true;
 				}
 			}
@@ -3189,9 +3265,8 @@ bool CStatTrakDigitProxy::HelperOnBindGetStatTrakScore( void *pC_BaseEntity, int
 			if ( pWeap )
 			{
 				CEconItemView* pItem = pWeap->GetAttributeContainer()->GetItem();
-				if ( pItem && pItem->FindAttribute( GetKillEaterAttr_Score( 0 ), &unScore ) )
+				if ( GetStatClockDataFromItem( pItem, piScore, pEventType ) )
 				{
-					*piScore = unScore;
 					bReturnValue = true;
 				}
 			}
@@ -3205,9 +3280,8 @@ bool CStatTrakDigitProxy::HelperOnBindGetStatTrakScore( void *pC_BaseEntity, int
 				{
 					// We're able to extract item attributes from dropped weapons, including strange count
 					CEconItemView* pItem = pDroppedWeapon->GetItem();
-					if ( pItem && pItem->FindAttribute( GetKillEaterAttr_Score( 0 ), &unScore ) )
+					if ( GetStatClockDataFromItem( pItem, piScore, pEventType ) )
 					{
-						*piScore = unScore;
 						bReturnValue = true;
 					}
 				}
@@ -3221,9 +3295,8 @@ bool CStatTrakDigitProxy::HelperOnBindGetStatTrakScore( void *pC_BaseEntity, int
 		if ( pRend )
 		{
 			const CEconItemView *pItem = dynamic_cast< CEconItemView* >( pRend );
-			if ( pItem && pItem->FindAttribute( GetKillEaterAttr_Score( 0 ), &unScore ) )
+			if ( GetStatClockDataFromItem( pItem, piScore, pEventType ) )
 			{
-				*piScore = unScore;
 				bReturnValue = true;
 			}
 		}
@@ -3235,14 +3308,32 @@ bool CStatTrakDigitProxy::HelperOnBindGetStatTrakScore( void *pC_BaseEntity, int
 void CStatTrakDigitProxy::OnBind( void *pC_BaseEntity )
 {
 	int nKillEaterAltScore = 0;
+	// ===== BEGIN STAT CLOCK ENHANCEMENT: RECEIVE SELECTED COUNTER EVENT TYPE =====
+	kill_eater_event_t eEventType = kKillEaterEvent_PlayerKill;
 
-	bool bHasScoreToDisplay = HelperOnBindGetStatTrakScore( pC_BaseEntity, &nKillEaterAltScore );
+	bool bHasScoreToDisplay = GetStatTrakData(
+		pC_BaseEntity, BindArgToEntity( pC_BaseEntity ), &nKillEaterAltScore, &eEventType
+	);
 	if ( !bHasScoreToDisplay )
 	{	// Error?
 		//SetFloatResult( (int)fmod( gpGlobals->curtime, 10.0f ) );
 		SetFloatResult( 0 );
 		return;
 	}
+
+	// Temporary learning/debug output. Material proxies may bind multiple times
+	// per frame, so rate-limit the message to once per second.
+	static float s_flNextEventTypePrintTime = 0.0f;
+	if ( gpGlobals->curtime >= s_flNextEventTypePrintTime )
+	{
+		Msg(
+			"[StatClock] Score: %d | Kill eater event enum: %d\n",
+			nKillEaterAltScore,
+			(int)eEventType
+		);
+		s_flNextEventTypePrintTime = gpGlobals->curtime + 1.0f;
+	}
+	// ===== END STAT CLOCK ENHANCEMENT: RECEIVE SELECTED COUNTER EVENT TYPE =====
 
 
 	int iDesiredDigit = (int)m_flDisplayDigit.GetFloat();
@@ -3305,6 +3396,54 @@ ConVar tf_stattrak_icon_scale( "tf_stattrak_icon_scale", "1.0", FCVAR_DEVELOPMEN
 
 void CStatTrakIconProxy::OnBind( void *pC_BaseEntity )
 {
+	// ===== BEGIN STAT CLOCK ENHANCEMENT: ICON MATERIAL DIAGNOSTIC =====
+	// A magenta checkerboard means Source resolved an error texture. Report the
+	// material and texture names so viewmodel/loadout material differences are
+	// visible in the console instead of being mistaken for atlas-offset errors.
+	static float s_flNextIconMaterialPrintTime = 0.0f;
+	if ( gpGlobals->curtime >= s_flNextIconMaterialPrintTime )
+	{
+		bool bFoundBaseTexture = false;
+		IMaterialVar *pBaseTextureVar = GetMaterial()->FindVar( "$basetexture", &bFoundBaseTexture, false );
+		ITexture *pBaseTexture = bFoundBaseTexture && pBaseTextureVar ? pBaseTextureVar->GetTextureValue() : NULL;
+
+		Msg(
+			"[StatClock] Icon material '%s' | base texture '%s' | error: %s\n",
+			GetMaterial()->GetName(),
+			pBaseTexture ? pBaseTexture->GetName() : "<missing $basetexture>",
+			IsErrorTexture( pBaseTexture ) ? "yes" : "no"
+		);
+		s_flNextIconMaterialPrintTime = gpGlobals->curtime + 2.0f;
+	}
+	// ===== END STAT CLOCK ENHANCEMENT: ICON MATERIAL DIAGNOSTIC =====
+
+	// ===== BEGIN STAT CLOCK ENHANCEMENT: ENUM-DRIVEN ICON OFFSET =====
+	int nScore = 0;
+	kill_eater_event_t eEventType = kKillEaterEvent_PlayerKill;
+
+	// Reuse the same item lookup as StatTrakDigit. The icon only needs the event
+	// type, but retrieving both values keeps each counter's score/type paired.
+	GetStatTrakData(
+		pC_BaseEntity, BindArgToEntity( pC_BaseEntity ), &nScore, &eEventType
+	);
+
+	// The atlas is 16 columns by 8 rows, ordered by kill_eater_event_t value.
+	// Integer division gives us the row, so an explicit floor() is unnecessary.
+	int nEventIndex = clamp( (int)eEventType, 0, 127 );
+	float flIconColumn = (float)( nEventIndex % 16 ) / 15.0f;
+	float flIconRow = (float)( nEventIndex / 16 ) / 7.0f;
+
+	// Scaling the original 0..1 model UV range down to one atlas cell is what
+	// actually crops the texture. Translation alone only slides the full atlas.
+	float flIconScaleX = 1.0f / 16.0f;
+	float flIconScaleY = 1.0f / 8.0f;
+
+	// flIconColumn/flIconRow run from 0..1. Multiply by the remaining UV range
+	// so the final column and row land at 15/16 and 7/8 respectively.
+	float flIconOffsetX = flIconColumn * ( 1.0f - flIconScaleX );
+	float flIconOffsetY = flIconRow * ( 1.0f - flIconScaleY );
+	// ===== END STAT CLOCK ENHANCEMENT: ENUM-DRIVEN ICON OFFSET =====
+
 	// Find the StatTracker Type and Lookup the offset, for now hacks!
 	//if ( !pC_BaseEntity )
 	//	return;
@@ -3334,13 +3473,13 @@ void CStatTrakIconProxy::OnBind( void *pC_BaseEntity )
 	//}
 	//MatrixBuildTranslation( mat, -center.x, -center.y, 0.0f );
 
-	//if ( m_pScaleVar )
-	//{
-	//	Vector2D scale;
-	//	m_pScaleVar->GetVecValue( scale.Base(), 2 );
-	//	MatrixBuildScale( temp, scale.x, scale.y, 1.0f );
-	//	MatrixMultiply( temp, mat, mat );
-	//}
+	// Crop the model's full icon UV range down to a single atlas cell.
+	{
+		// ===== BEGIN STAT CLOCK ENHANCEMENT: CROP TO ONE ATLAS CELL =====
+		MatrixBuildScale( temp, flIconScaleX, flIconScaleY, 1.0f );
+		MatrixMultiply( temp, mat, mat );
+		// ===== END STAT CLOCK ENHANCEMENT: CROP TO ONE ATLAS CELL =====
+	}
 
 	//if ( m_pRotateVar )
 	//{
@@ -3354,7 +3493,9 @@ void CStatTrakIconProxy::OnBind( void *pC_BaseEntity )
 	//if ( m_pTranslateVar )
 	{
 		//m_pTranslateVar->GetVecValue( translation.Base(), 2 );
-		MatrixBuildTranslation( temp, tf_stattrak_icon_offset_x.GetFloat(), tf_stattrak_icon_offset_y.GetFloat(), 0.0f );
+		// ===== BEGIN STAT CLOCK ENHANCEMENT: APPLY ICON OFFSET =====
+		MatrixBuildTranslation( temp, flIconOffsetX, flIconOffsetY, 0.0f );
+		// ===== END STAT CLOCK ENHANCEMENT: APPLY ICON OFFSET =====
 		MatrixMultiply( temp, mat, mat );
 	}
 

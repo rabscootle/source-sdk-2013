@@ -17,6 +17,7 @@
 #include <../common/GameUI/cvarslider.h>
 #include <vgui/VGUI.h>
 #include "vgui_controls/CheckButton.h"
+#include "vgui_controls/ComboBox.h"
 
 #define NUM_ITEM_PANELS_IN_LOADOUT		CLASS_LOADOUT_POSITION_COUNT
 
@@ -40,13 +41,18 @@ public:
 private:
 
 	void AddControlsParticleEffect( void ) const;
+	void AddControlsStatTrakDisplay( void );
 	void AddControlsSetStyle( void ) const;
+	void ApplyStatTrakDisplayOverride( int iDisplaySlot );
 	CEconItemView* GetItem( void ) const;
 
 	class vgui::PanelListPanel	*m_pListPanel;
 	CCvarSlider					*m_pHatParticleSlider;
 	CExButton					*m_pSetStyleButton;
+	CExLabel					*m_pStatTrakDisplayHeader;
+	vgui::ComboBox				*m_pStatTrakDisplayComboBox;
 	vgui::CheckButton			*m_pHatParticleUseHeadButton;
+	bool						m_bPopulatingStatTrakDisplayComboBox;
 
 	int						m_iCurrentClassIndex;
 	loadout_positions_t		m_eItemSlot;

@@ -778,6 +778,7 @@ const class CEconItemAttributeDefinition *GetKillEaterAttr_Score( int i );
 const class CEconItemAttributeDefinition *GetKillEaterAttr_Type( int i );
 const class CEconItemAttributeDefinition *GetKillEaterAttr_Restriction( int i );
 const class CEconItemAttributeDefinition *GetKillEaterAttr_RestrictionValue( int i );
+bool BIsValidKillEaterSlotForItem( const class IEconItemInterface *pItem, int iSlot );
 bool GetKillEaterAttr_IsUserCustomizable( int i );
 bool GetKilleaterValueByEvent( const class IEconItemInterface* pItem, const kill_eater_event_t& EEventType, uint32& value );
 bool BIsItemStrange( const class IEconItemInterface *pItem );

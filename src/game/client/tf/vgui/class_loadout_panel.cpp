@@ -8,6 +8,7 @@
 #include "cbase.h"
 #include "class_loadout_panel.h"
 #include "c_tf_player.h"
+#include "tf_weaponbase.h"
 #include "vgui_controls/CheckButton.h"
 #include "econ_gcmessages.h"
 #include "gc_clientsystem.h"
@@ -22,6 +23,26 @@
 #include <tier0/memdbgon.h>
 
 extern ConVar tf_respawn_on_loadoutchanges;
+
+// weapon_uses_stattrak_module describes a war-paint weapon's module capability.
+// A physical Stat Clock is only attached when the item also has Strange data.
+static bool ItemHasAttachedStatClock( const CEconItemView *pItem )
+{
+	return pItem && GetStattrak( pItem ) && BIsItemStrange( pItem );
+}
+
+// Return the number of physical Kill Eater slots that contain real counters.
+// The Stat Clock selector is only useful when the user has a choice.
+static int GetStatClockCounterCount( const CEconItemView *pItem )
+{
+	int iCounterCount = 0;
+	for ( int iSlot = 0; pItem && iSlot < GetKillEaterAttrCount(); ++iSlot )
+	{
+		if ( BIsValidKillEaterSlotForItem( pItem, iSlot ) )
+			++iCounterCount;
+	}
+	return iCounterCount;
+}
 
 ConVar tf_show_preset_explanation_in_class_loadout( "tf_show_preset_explanation_in_class_loadout", "1", FCVAR_HIDDEN | FCVAR_CLIENTDLL | FCVAR_ARCHIVE );
 ConVar tf_show_taunt_explanation_in_class_loadout( "tf_show_taunt_explanation_in_class_loadout", "1", FCVAR_HIDDEN | FCVAR_CLIENTDLL | FCVAR_ARCHIVE );
@@ -213,6 +234,13 @@ CLoadoutItemOptionsPanel::CLoadoutItemOptionsPanel( Panel *parent, const char *p
 	m_pHatParticleUseHeadButton->AddActionSignalTarget( this );
 	m_pSetStyleButton = new CExButton( m_pListPanel, "SetStyleButton", "#TF_Item_SelectStyle" );
 	m_pSetStyleButton->AddActionSignalTarget( this );
+	// ===== BEGIN STAT CLOCK ENHANCEMENT: LOADOUT COUNTER DROPDOWN =====
+	m_bPopulatingStatTrakDisplayComboBox = false;
+	m_pStatTrakDisplayHeader = new CExLabel( m_pListPanel, "StatTrakDisplayHeader", "Stat Clock" );
+	m_pStatTrakDisplayHeader->SetContentAlignment( vgui::Label::a_west );
+	m_pStatTrakDisplayComboBox = new vgui::ComboBox( m_pListPanel, "StatTrakDisplayComboBox", GetKillEaterAttrCount(), false );
+	m_pStatTrakDisplayComboBox->AddActionSignalTarget( this );
+	// ===== END STAT CLOCK ENHANCEMENT: LOADOUT COUNTER DROPDOWN =====
 }
 
 //-----------------------------------------------------------------------------
@@ -220,12 +248,37 @@ void CLoadoutItemOptionsPanel::ApplySchemeSettings( vgui::IScheme *pScheme )
 {
 	BaseClass::ApplySchemeSettings( pScheme );
 	LoadControlSettings( "resource/UI/ItemOptionsPanel.res" );
+
+	// ===== BEGIN STAT CLOCK ENHANCEMENT: HEADER FONT =====
+	// SetStyleButton receives its TF Build font from ItemOptionsPanel.res. The
+	// Stat Clock text is created in code and has no resource entry, so copy the
+	// already-resolved font after the resource settings have been applied.
+	m_pStatTrakDisplayHeader->SetFont( m_pSetStyleButton->GetFont() );
+	m_pStatTrakDisplayHeader->SetFgColor( m_pSetStyleButton->GetFgColor() );
+
+	// Dynamically-created controls do not receive the proportional dimensions
+	// from ItemOptionsPanel.res. Reuse the resolved Select Style row height so
+	// the scaled TF Build font cannot overflow its row at high resolutions.
+	const int iOptionRowTall = m_pSetStyleButton->GetTall();
+	m_pStatTrakDisplayHeader->SetTall( iOptionRowTall );
+	m_pStatTrakDisplayComboBox->SetTall( iOptionRowTall );
+	// ===== END STAT CLOCK ENHANCEMENT: HEADER FONT =====
 }
 
 //-----------------------------------------------------------------------------
 void CLoadoutItemOptionsPanel::PerformLayout( void ) 
 {
 	BaseClass::PerformLayout();
+
+	// ===== BEGIN STAT CLOCK ENHANCEMENT: RESOLUTION-SAFE OPTION WIDTH =====
+	// ItemOptionsPanel.res and its dynamically-created children can wind up on
+	// different proportional scales. Size the list from the actual parent width
+	// so its controls and a ComboBox's popup use the same visible dimensions.
+	const int iListX = m_pListPanel->GetXPos();
+	m_pListPanel->SetWide( Max( 0, GetWide() - ( iListX * 2 ) ) );
+	m_pListPanel->InvalidateLayout( true, false );
+	// ===== END STAT CLOCK ENHANCEMENT: RESOLUTION-SAFE OPTION WIDTH =====
+
 	m_pHatParticleSlider->SetTickColor( Color( 235, 226, 202, 255 ) ); // tanlight
 }
 
@@ -275,6 +328,21 @@ void CLoadoutItemOptionsPanel::OnMessage( const KeyValues* pParams, vgui::VPANEL
 	{
 		m_pHatParticleSlider->ApplyChanges();
 	}
+	// ===== BEGIN STAT CLOCK ENHANCEMENT: DROPDOWN SELECTION =====
+	else if ( FStrEq( pParams->GetName(), "TextChanged" ) && !m_bPopulatingStatTrakDisplayComboBox )
+	{
+		// This SDK's KeyValues accessors are not const-qualified even though
+		// Panel::OnMessage supplies a const KeyValues pointer.
+		KeyValues *pMutableParams = const_cast<KeyValues *>( pParams );
+		vgui::Panel *pPanel = reinterpret_cast<vgui::Panel *>( pMutableParams->GetPtr( "panel" ) );
+		if ( pPanel == m_pStatTrakDisplayComboBox )
+		{
+			KeyValues *pUserData = m_pStatTrakDisplayComboBox->GetActiveItemUserData();
+			if ( pUserData )
+				ApplyStatTrakDisplayOverride( pUserData->GetInt( "kill_eater_slot", 0 ) );
+		}
+	}
+	// ===== END STAT CLOCK ENHANCEMENT: DROPDOWN SELECTION =====
 
 	BaseClass::OnMessage( pParams, hFromPanel );
 }
@@ -323,6 +391,7 @@ void CLoadoutItemOptionsPanel::UpdateItemOptionsUI()
 
 	// Add controls for various item options
 	AddControlsParticleEffect();
+	AddControlsStatTrakDisplay();
 	AddControlsSetStyle();
 
 	// Bail if no controls added
@@ -342,6 +411,109 @@ void CLoadoutItemOptionsPanel::UpdateItemOptionsUI()
 	SetTall( nNewTall );
 	InvalidateLayout( true, false );
 }
+
+//-----------------------------------------------------------------------------
+void CLoadoutItemOptionsPanel::AddControlsStatTrakDisplay( void )
+{
+	m_pStatTrakDisplayHeader->SetVisible( false );
+	m_pStatTrakDisplayComboBox->SetVisible( false );
+	m_bPopulatingStatTrakDisplayComboBox = true;
+	m_pStatTrakDisplayComboBox->RemoveAll();
+
+	CEconItemView *pItem = GetItem();
+	if ( ItemHasAttachedStatClock( pItem ) && GetStatClockCounterCount( pItem ) > 1 )
+	{
+		static CSchemaAttributeDefHandle pAttrDef_StatTrakDisplayOverride( "stattrak display override" );
+		uint32 unSelectedSlot = 0;
+		if ( pAttrDef_StatTrakDisplayOverride )
+			pItem->FindAttribute( pAttrDef_StatTrakDisplayOverride, &unSelectedSlot );
+
+		int iSelectedRow = 0;
+		int iRow = 0;
+		KeyValues *pUserData = new KeyValues( "data" );
+		for ( int iSlot = 0; iSlot < GetKillEaterAttrCount(); ++iSlot )
+		{
+			if ( !BIsValidKillEaterSlotForItem( pItem, iSlot ) )
+				continue;
+
+			// Kill Eater event types use float-sized econ attribute storage. Read
+			// them the same way as the Stat Clock material proxy so the localized
+			// Strange Part title is resolved from the correct enum value.
+			float flEventType = (float)kKillEaterEvent_PlayerKill;
+			FindAttribute_UnsafeBitwiseCast<attrib_value_t>( pItem, GetKillEaterAttr_Type( iSlot ), &flEventType );
+			uint32 unEventType = (uint32)flEventType;
+
+			pUserData->SetInt( "kill_eater_slot", iSlot );
+			const char *pszCounterName = GetItemSchema()->GetKillEaterScoreTypeLocString( unEventType );
+			const wchar_t *pwszCounterName = pszCounterName ? g_pVGuiLocalize->Find( pszCounterName ) : NULL;
+			if ( pwszCounterName )
+			{
+				m_pStatTrakDisplayComboBox->AddItem( pwszCounterName, pUserData );
+			}
+			else
+			{
+				wchar_t wszFallback[64];
+				V_swprintf_safe( wszFallback, L"Kill Eater slot %d", iSlot );
+				m_pStatTrakDisplayComboBox->AddItem( wszFallback, pUserData );
+			}
+
+			if ( iSlot == (int)unSelectedSlot )
+				iSelectedRow = iRow;
+			++iRow;
+		}
+		pUserData->deleteThis();
+
+		if ( iRow > 0 )
+		{
+			m_pStatTrakDisplayComboBox->SetNumberOfEditLines( iRow );
+			m_pStatTrakDisplayComboBox->ActivateItemByRow( iSelectedRow );
+			m_pStatTrakDisplayHeader->SetVisible( true );
+			m_pStatTrakDisplayComboBox->SetVisible( true );
+			m_pListPanel->AddItem( NULL, m_pStatTrakDisplayHeader );
+			m_pListPanel->AddItem( NULL, m_pStatTrakDisplayComboBox );
+		}
+	}
+	m_bPopulatingStatTrakDisplayComboBox = false;
+}
+
+// ===== BEGIN STAT CLOCK ENHANCEMENT: APPLY DROPDOWN SELECTION =====
+void CLoadoutItemOptionsPanel::ApplyStatTrakDisplayOverride( int iDisplaySlot )
+{
+	CEconItemView *pItem = GetItem();
+	if ( !ItemHasAttachedStatClock( pItem ) || !BIsValidKillEaterSlotForItem( pItem, iDisplaySlot ) )
+		return;
+
+	static CSchemaAttributeDefHandle pAttrDef_StatTrakDisplayOverride( "stattrak display override" );
+	if ( !pAttrDef_StatTrakDisplayOverride )
+		return;
+
+	// Keep the selection on the loadout item for this client session.
+	pItem->GetAttributeList()->RemoveAttribute( pAttrDef_StatTrakDisplayOverride );
+	CEconItemAttribute displayOverride( pAttrDef_StatTrakDisplayOverride->GetDefinitionIndex(), (uint32)iDisplaySlot );
+	pItem->GetAttributeList()->AddAttribute( &displayOverride );
+
+	// Also update the currently spawned weapon immediately. Future weapon
+	// entities recover the same value from the loadout item by unique item ID.
+	C_TFPlayer *pLocalPlayer = C_TFPlayer::GetLocalTFPlayer();
+	CTFWeaponBase *pEquippedWeapon = pLocalPlayer
+		? dynamic_cast<CTFWeaponBase *>( pLocalPlayer->GetEntityForLoadoutSlot( m_eItemSlot ) )
+		: NULL;
+	if ( pEquippedWeapon )
+	{
+		CEconItemView *pEquippedItem = pEquippedWeapon->GetAttributeContainer()->GetItem();
+		if ( pEquippedItem )
+		{
+			pEquippedItem->GetAttributeList()->RemoveAttribute( pAttrDef_StatTrakDisplayOverride );
+			CEconItemAttribute equippedOverride( pAttrDef_StatTrakDisplayOverride->GetDefinitionIndex(), (uint32)iDisplaySlot );
+			pEquippedItem->GetAttributeList()->AddAttribute( &equippedOverride );
+		}
+	}
+
+	Msg( "[StatClock] Display counter selected: Kill Eater slot %d\n", iDisplaySlot );
+	if ( g_pClassLoadoutPanel )
+		g_pClassLoadoutPanel->UpdateModelPanels();
+}
+// ===== END STAT CLOCK ENHANCEMENT: APPLY DROPDOWN SELECTION =====
 
 //-----------------------------------------------------------------------------
 void CLoadoutItemOptionsPanel::AddControlsParticleEffect( void ) const
@@ -394,7 +566,7 @@ void CLoadoutItemOptionsPanel::AddControlsSetStyle( void ) const
 	m_pSetStyleButton->SetVisible( false );
 
 	CEconItemView *pItem = GetItem();
-	if ( pItem && pItem->GetStaticData()->GetNumStyles() )
+	if ( pItem && pItem->GetStaticData()->GetNumSelectableStyles() > 1 )
 	{
 		m_pSetStyleButton->SetVisible( true );
 		m_pListPanel->AddItem( NULL, m_pSetStyleButton );
@@ -1136,6 +1308,11 @@ bool CClassLoadoutPanel::AnyOptionsAvailableForItem( const CEconItemView *pItem 
 	// Unusual particle effect! For Cosmetics only
 	static CSchemaAttributeDefHandle pAttrDef_AttachParticleEffect( "attach particle effect" );
 	if ( pItem->FindAttribute( pAttrDef_AttachParticleEffect ) && pItem->GetItemDefinition()->GetLoadoutSlot( 0 ) >= LOADOUT_POSITION_HEAD )
+		return true;
+
+	// Stat Clock display selection. GetStattrak() specifically requires the
+	// attached Stat Clock module, so an ordinary Strange weapon is not enough.
+	if ( ItemHasAttachedStatClock( pItem ) && GetStatClockCounterCount( pItem ) > 1 )
 		return true;
 
 	return false;
