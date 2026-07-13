@@ -3117,8 +3117,6 @@ public:
 	virtual bool Init( IMaterial *pMaterial, KeyValues *pKeyValues );
 	virtual void OnBind( void *pC_BaseEntity );
 
-	virtual bool HelperOnBindGetStatTrakScore( void *pC_BaseEntity, int *piScore );
-
 private:
 	CFloatInput	m_flDisplayDigit; // the particular digit we want to display
 	CFloatInput	m_flTrimZeros;
@@ -3139,17 +3137,42 @@ bool CStatTrakDigitProxy::Init( IMaterial *pMaterial, KeyValues *pKeyValues )
 	return true;
 }
 
-bool CStatTrakDigitProxy::HelperOnBindGetStatTrakScore( void *pC_BaseEntity, int *piScore )
+// ===== BEGIN STAT CLOCK ENHANCEMENT: PRIMARY COUNTER DATA =====
+// Read the score and event type from the same primary Kill Eater slot. Slot 0
+// is intentionally fixed here; this version has no display-override behavior.
+static bool GetStatClockData( const CEconItemView *pItem, int *piScore, kill_eater_event_t *pEventType )
+{
+	if ( !pItem || !piScore || !pEventType )
+		return false;
+
+	uint32 unScore = 0;
+	if ( !pItem->FindAttribute( GetKillEaterAttr_Score( 0 ), &unScore ) )
+		return false;
+
+	*piScore = unScore;
+	*pEventType = kKillEaterEvent_PlayerKill;
+
+	// Kill Eater types use float-sized econ storage. The type attribute may be
+	// absent on older primary counters, where Player Kills is the default.
+	float flEventType;
+	if ( FindAttribute_UnsafeBitwiseCast<attrib_value_t>( pItem, GetKillEaterAttr_Type( 0 ), &flEventType ) )
+		*pEventType = (kill_eater_event_t)(uint32)flEventType;
+
+	return true;
+}
+
+// This is the original StatTrak item lookup generalized for both material
+// proxies. BindArgToEntity() remains in each proxy because it is protected by
+// CResultProxy.
+static bool GetPrimaryStatTrakData( void *pC_BaseEntity, C_BaseEntity *pEntity, int *piScore, kill_eater_event_t *pEventType )
 {
 	if ( !pC_BaseEntity )
 		return false;
 
-	if ( !piScore )
+	if ( !piScore || !pEventType )
 		return false;
 
 	bool bReturnValue = false;
-	uint32 unScore = 0;
-	C_BaseEntity *pEntity = BindArgToEntity( pC_BaseEntity );
 	if ( pEntity )
 	{
 		// StatTrak modules are children of their accompanying viewmodels
@@ -3161,11 +3184,9 @@ bool CStatTrakDigitProxy::HelperOnBindGetStatTrakScore( void *pC_BaseEntity, int
 			CTFWeaponBase *pWeap = dynamic_cast<CTFWeaponBase*>( pViewModel->GetOwnerEntity() );
 			if ( pWeap )
 			{
-				
-				// Use the strange prefix if the weapon has one.
-				if ( pWeap->GetAttributeContainer()->GetItem()->FindAttribute( GetKillEaterAttr_Score( 0 ), &unScore ) )
+				CEconItemView *pItem = pWeap->GetAttributeContainer()->GetItem();
+				if ( GetStatClockData( pItem, piScore, pEventType ) )
 				{
-					*piScore = unScore;
 					bReturnValue = true;
 				}
 			}
@@ -3189,9 +3210,8 @@ bool CStatTrakDigitProxy::HelperOnBindGetStatTrakScore( void *pC_BaseEntity, int
 			if ( pWeap )
 			{
 				CEconItemView* pItem = pWeap->GetAttributeContainer()->GetItem();
-				if ( pItem && pItem->FindAttribute( GetKillEaterAttr_Score( 0 ), &unScore ) )
+				if ( GetStatClockData( pItem, piScore, pEventType ) )
 				{
-					*piScore = unScore;
 					bReturnValue = true;
 				}
 			}
@@ -3205,9 +3225,8 @@ bool CStatTrakDigitProxy::HelperOnBindGetStatTrakScore( void *pC_BaseEntity, int
 				{
 					// We're able to extract item attributes from dropped weapons, including strange count
 					CEconItemView* pItem = pDroppedWeapon->GetItem();
-					if ( pItem && pItem->FindAttribute( GetKillEaterAttr_Score( 0 ), &unScore ) )
+					if ( GetStatClockData( pItem, piScore, pEventType ) )
 					{
-						*piScore = unScore;
 						bReturnValue = true;
 					}
 				}
@@ -3221,22 +3240,25 @@ bool CStatTrakDigitProxy::HelperOnBindGetStatTrakScore( void *pC_BaseEntity, int
 		if ( pRend )
 		{
 			const CEconItemView *pItem = dynamic_cast< CEconItemView* >( pRend );
-			if ( pItem && pItem->FindAttribute( GetKillEaterAttr_Score( 0 ), &unScore ) )
+			if ( GetStatClockData( pItem, piScore, pEventType ) )
 			{
-				*piScore = unScore;
 				bReturnValue = true;
 			}
 		}
 	}
 	return bReturnValue;
 }
+// ===== END STAT CLOCK ENHANCEMENT: PRIMARY COUNTER DATA =====
 
 
 void CStatTrakDigitProxy::OnBind( void *pC_BaseEntity )
 {
 	int nKillEaterAltScore = 0;
+	kill_eater_event_t eEventType = kKillEaterEvent_PlayerKill;
 
-	bool bHasScoreToDisplay = HelperOnBindGetStatTrakScore( pC_BaseEntity, &nKillEaterAltScore );
+	bool bHasScoreToDisplay = GetPrimaryStatTrakData(
+		pC_BaseEntity, BindArgToEntity( pC_BaseEntity ), &nKillEaterAltScore, &eEventType
+	);
 	if ( !bHasScoreToDisplay )
 	{	// Error?
 		//SetFloatResult( (int)fmod( gpGlobals->curtime, 10.0f ) );
@@ -3305,6 +3327,28 @@ ConVar tf_stattrak_icon_scale( "tf_stattrak_icon_scale", "1.0", FCVAR_DEVELOPMEN
 
 void CStatTrakIconProxy::OnBind( void *pC_BaseEntity )
 {
+	// ===== BEGIN STAT CLOCK ENHANCEMENT: PRIMARY COUNTER ICON =====
+	int nScore = 0;
+	kill_eater_event_t eEventType = kKillEaterEvent_PlayerKill;
+
+	// Use the same slot-0 lookup as the digit proxy so the icon always describes
+	// the primary score shown on the Stat Clock.
+	GetPrimaryStatTrakData(
+		pC_BaseEntity, BindArgToEntity( pC_BaseEntity ), &nScore, &eEventType
+	);
+
+	// The icon sheet is 16 columns by 8 rows, ordered by kill_eater_event_t.
+	// Clamp to the atlas capacity before converting the enum to a cell.
+	int nEventIndex = clamp( (int)eEventType, 0, 127 );
+	int nIconColumn = nEventIndex % 16;
+	int nIconRow = nEventIndex / 16;
+
+	const float flIconScaleX = 1.0f / 16.0f;
+	const float flIconScaleY = 1.0f / 8.0f;
+	const float flIconOffsetX = nIconColumn * flIconScaleX;
+	const float flIconOffsetY = nIconRow * flIconScaleY;
+	// ===== END STAT CLOCK ENHANCEMENT: PRIMARY COUNTER ICON =====
+
 	// Find the StatTracker Type and Lookup the offset, for now hacks!
 	//if ( !pC_BaseEntity )
 	//	return;
@@ -3334,13 +3378,13 @@ void CStatTrakIconProxy::OnBind( void *pC_BaseEntity )
 	//}
 	//MatrixBuildTranslation( mat, -center.x, -center.y, 0.0f );
 
-	//if ( m_pScaleVar )
-	//{
-	//	Vector2D scale;
-	//	m_pScaleVar->GetVecValue( scale.Base(), 2 );
-	//	MatrixBuildScale( temp, scale.x, scale.y, 1.0f );
-	//	MatrixMultiply( temp, mat, mat );
-	//}
+	// Crop the full model UV range down to one atlas cell.
+	{
+		// ===== BEGIN STAT CLOCK ENHANCEMENT: CROP ICON ATLAS =====
+		MatrixBuildScale( temp, flIconScaleX, flIconScaleY, 1.0f );
+		MatrixMultiply( temp, mat, mat );
+		// ===== END STAT CLOCK ENHANCEMENT: CROP ICON ATLAS =====
+	}
 
 	//if ( m_pRotateVar )
 	//{
@@ -3354,7 +3398,9 @@ void CStatTrakIconProxy::OnBind( void *pC_BaseEntity )
 	//if ( m_pTranslateVar )
 	{
 		//m_pTranslateVar->GetVecValue( translation.Base(), 2 );
-		MatrixBuildTranslation( temp, tf_stattrak_icon_offset_x.GetFloat(), tf_stattrak_icon_offset_y.GetFloat(), 0.0f );
+		// ===== BEGIN STAT CLOCK ENHANCEMENT: SELECT ICON ATLAS CELL =====
+		MatrixBuildTranslation( temp, flIconOffsetX, flIconOffsetY, 0.0f );
+		// ===== END STAT CLOCK ENHANCEMENT: SELECT ICON ATLAS CELL =====
 		MatrixMultiply( temp, mat, mat );
 	}
 
