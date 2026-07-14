@@ -15328,6 +15328,13 @@ const char* CTFPlayer::GetSceneSoundToken( void )
 			return "MVM_";
 		}
 	}
+	else if ( TFGameRules() && TFGameRules()->IsMannVsMachineMode() &&
+			  GetTeamNumber() == TF_TEAM_PVE_DEFENDERS &&
+			  IsPlayerClass( TF_CLASS_SPY ) &&
+			  m_Shared.InCond( TF_COND_DISGUISED ) )
+	{
+		return "MVM_";
+	}
 	else
 	{
 		return "";
