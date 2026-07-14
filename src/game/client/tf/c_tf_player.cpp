@@ -3340,7 +3340,7 @@ void CStatTrakIconProxy::OnBind( void *pC_BaseEntity )
 	VMatrix mat, temp;
 	mat.Identity();	// Reset matrix!
 
-	// Crop the full model UV range down to one atlas cell.
+	// Crop the full icon sheet to one cell and append to the Stat Clock display
 	MatrixBuildScale(temp, flIconScaleX, flIconScaleY, 1.0f);
 	MatrixMultiply(temp, mat, mat);
 	MatrixBuildTranslation( temp, flIconOffsetX, flIconOffsetY, 0.0f );
