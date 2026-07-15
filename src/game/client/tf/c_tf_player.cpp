@@ -1766,7 +1766,7 @@ void CSpyInvisProxy::OnBindNotEntity( void *pRenderable )
 EXPOSE_INTERFACE( CSpyInvisProxy, IMaterialProxy, "spy_invis" IMATERIAL_PROXY_INTERFACE_VERSION );
 
 //-----------------------------------------------------------------------------
-// Purpose: Replaces a material's texture while playing Mann vs. Machine.
+// Purpose: Replaces a material's texture while playing Mann vs. Machine
 //-----------------------------------------------------------------------------
 class CMvMTextureProxy : public CResultProxy
 {
@@ -1781,48 +1781,52 @@ private:
 	CTextureReference m_MvMTexture;
 };
 
+// MvM Proxy INIT
 bool CMvMTextureProxy::Init( IMaterial *pMaterial, KeyValues *pKeyValues )
 {
-	if ( !CResultProxy::Init( pMaterial, pKeyValues ) )
+	if ( !CResultProxy::Init( pMaterial, pKeyValues ) )						// Init - searching for 'MvMTexture' in VMT
 		return false;
 
-	const char *pszMvMTexture = pKeyValues->GetString( "mvmTexture", "" );
+	const char *pszMvMTexture = pKeyValues->GetString( "mvmTexture", "" );	// If our VMT has 'MvMTexture', extract the texture replacement path
 	if ( !pszMvMTexture[0] )
-		return false;
+		return false;														// return false if no texture path was provided in var
 
-	m_MvMTexture.Init( pszMvMTexture, TEXTURE_GROUP_MODEL );
+	m_MvMTexture.Init( pszMvMTexture, TEXTURE_GROUP_MODEL );				// Initialize texture!
 
 	// With async material loading, $basetexture may still be a string here.
 	// CaptureOriginalTexture will try again when the material is first bound.
-	CaptureOriginalTexture();
+	CaptureOriginalTexture();												// Looks like we're holding the initial texture here while the replacement is on the way!
 
-	return m_MvMTexture.IsValid();
+	return m_MvMTexture.IsValid();											// Finally, returning true if we have a valid replacement texture!
 }
 
-bool CMvMTextureProxy::CaptureOriginalTexture()
+// Making sure that the original base texture has been captured, so we can restore it when not in MvM mode
+bool CMvMTextureProxy::CaptureOriginalTexture()								
 {
-	if ( m_OriginalTexture.IsValid() )
+	if ( m_OriginalTexture.IsValid() )										// If we already have the original texture, no need to capture it again
 		return true;
 
-	if ( !m_pResult || !m_pResult->IsTexture() )
+	if (!m_pResult || !m_pResult->IsTexture())								// If we don't have a valid texture path, we can't capture the original texture
 		return false;
 
-	ITexture *pOriginalTexture = m_pResult->GetTextureValue();
-	if ( !pOriginalTexture )
+	ITexture* pOriginalTexture = m_pResult->GetTextureValue();				// Get the original texture from the material variable
+	if ( !pOriginalTexture )												// If we don't have a value from this... can't work!
 		return false;
 
-	m_OriginalTexture.Init( pOriginalTexture );
+	m_OriginalTexture.Init( pOriginalTexture );								// Initialize the original texture reference with the captured texture
 	return true;
 }
 
+// MvM Proxy DRAW CALL
 void CMvMTextureProxy::OnBind( void *pC_BaseEntity )
 {
-	if ( !CaptureOriginalTexture() )
+	if ( !CaptureOriginalTexture() )										// If we can't capture the original texture, we can't proceed with the replacement
 		return;
 
-	const bool bUseMvMTexture = TFGameRules() && TFGameRules()->IsMannVsMachineMode();
+	const bool bUseMvMTexture = TFGameRules() && TFGameRules()->IsMannVsMachineMode();	// Are we in MvM?
 	m_pResult->SetTextureValue( bUseMvMTexture ? m_MvMTexture : m_OriginalTexture );
 
+	// Standard dev tool support guff
 	if ( ToolsEnabled() )
 	{
 		ToolFramework_RecordMaterialParams( GetMaterial() );
