@@ -184,7 +184,8 @@ static bool IsMvMRobotDisguise( C_TFPlayer *pPlayer )
 		   TFGameRules() && TFGameRules()->IsMannVsMachineMode() &&
 		   pPlayer->GetTeamNumber() == TF_TEAM_PVE_DEFENDERS &&
 		   pPlayer->IsPlayerClass( TF_CLASS_SPY ) &&
-		   pPlayer->m_Shared.InCond( TF_COND_DISGUISED );
+		   pPlayer->m_Shared.InCond( TF_COND_DISGUISED ) &&
+		   pPlayer->m_Shared.GetDisguiseTeam() != pPlayer->GetTeamNumber();
 }
 
 //-----------------------------------------------------------------------------
