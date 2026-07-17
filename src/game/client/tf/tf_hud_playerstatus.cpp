@@ -204,9 +204,9 @@ void CTFHudPlayerClass::OnThink()
 	CTFWeaponBase *pDisguiseWeapon = pPlayer->m_Shared.GetDisguiseWeapon();
 	bool bDisguiseIdentityChanged = m_nDisguiseClass != pPlayer->m_Shared.GetDisguiseClass() ||
 								m_nDisguiseTeam != pPlayer->m_Shared.GetDisguiseTeam();
-	bool bWaitingForRobotDisguiseWeapon = IsMvMRobotDisguise( pPlayer ) &&
+	bool bWaitingForDisguiseWeapon = pPlayer->m_Shared.InCond( TF_COND_DISGUISED ) &&
 		( !pDisguiseWeapon || ( bDisguiseIdentityChanged && m_hDisguiseWeapon.Get() == pDisguiseWeapon ) );
-	if ( bWaitingForRobotDisguiseWeapon )
+	if ( bWaitingForDisguiseWeapon )
 	{
 		m_flNextThink = gpGlobals->curtime + 0.05f;
 		return;
@@ -474,7 +474,7 @@ void CTFHudPlayerClass::UpdateModelPanel()
 		CTFWeaponBase *pDisguiseWeapon = pPlayer->m_Shared.GetDisguiseWeapon();
 		bool bDisguiseIdentityChanged = m_nDisguiseClass != pPlayer->m_Shared.GetDisguiseClass() ||
 								m_nDisguiseTeam != pPlayer->m_Shared.GetDisguiseTeam();
-		if ( bRobotDisguise &&
+		if ( bDisguised &&
 			 ( !pDisguiseWeapon || ( bDisguiseIdentityChanged && m_hDisguiseWeapon.Get() == pDisguiseWeapon ) ) )
 		{
 			m_flNextThink = gpGlobals->curtime + 0.05f;
