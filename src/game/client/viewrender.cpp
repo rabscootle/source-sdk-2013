@@ -2314,16 +2314,21 @@ void CViewRender::RenderView( const CViewSetup &viewRender, int nClearFlags, int
 		int viewFramebufferHeight = viewHeight;
 		bool bClear = false;
 		bool bPaintMainMenu = false;
+		bool bUpdateVRHUDTexture = true;
 		ITexture *pTexture = NULL;
 		if( UseVR() )
 		{
 			if( g_ClientVirtualReality.ShouldRenderHUDInWorld() )
 			{
-				pTexture = materials->FindTexture( "_rt_gui", NULL, false );
+				// Populate the shared UI texture once, during the left-eye pass.
+				// Repainting it for the right eye produces different contents because
+				// model/monitor rendering is suppressed there, causing binocular flicker.
+				bUpdateVRHUDTexture = viewRender.m_eStereoEye != STEREO_EYE_RIGHT;
+				pTexture = materials->FindTexture( "_rt_OpenVRUI", NULL, false );
 				if( pTexture )
 				{
-					bPaintMainMenu = true;
-					bClear = true;
+					bPaintMainMenu = bUpdateVRHUDTexture;
+					bClear = bUpdateVRHUDTexture;
 					viewX = 0;
 					viewY = 0;
 					viewActualWidth = pTexture->GetActualWidth();
@@ -2355,7 +2360,7 @@ void CViewRender::RenderView( const CViewSetup &viewRender, int nClearFlags, int
 		}
 
 		// constrain where VGUI can render to the view
-		pRenderContext->PushRenderTargetAndViewport( pTexture, NULL, viewX, viewY, viewActualWidth, viewActualHeight );
+		pRenderContext->PushRenderTargetAndViewport( pTexture, viewX, viewY, viewActualWidth, viewActualHeight );
 		// If drawing off-screen, force alpha for that pass
 		if (pTexture)
 		{
@@ -2365,21 +2370,31 @@ void CViewRender::RenderView( const CViewSetup &viewRender, int nClearFlags, int
 		// let vgui know where to render stuff for the forced-to-framebuffer panels
 		if( UseVR() )
 		{
-			g_pMatSystemSurface->SetFullscreenViewportAndRenderTarget( viewFramebufferX, viewFramebufferY, viewFramebufferWidth, viewFramebufferHeight, saveRenderTarget );
+			// Model panels enter Begin3DPaint during VGui_Paint. Point that nested
+			// 3D pass at the same shared UI target as the surrounding 2D paint;
+			// otherwise the model is rendered into the eye buffer and never becomes
+			// part of _rt_gui (and may alternate between the two eyes).
+			ITexture *pFullscreenTarget = ( bUpdateVRHUDTexture && pTexture ) ? pTexture : saveRenderTarget;
+			int fullscreenWidth = pFullscreenTarget == pTexture ? viewActualWidth : viewFramebufferWidth;
+			int fullscreenHeight = pFullscreenTarget == pTexture ? viewActualHeight : viewFramebufferHeight;
+			g_pMatSystemSurface->SetFullscreenViewportAndRenderTarget(
+				viewFramebufferX, viewFramebufferY, fullscreenWidth, fullscreenHeight, pFullscreenTarget );
 		}
 
 		// clear the render target if we need to
 		if( bClear )
 		{
 			pRenderContext->ClearColor4ub( 0, 0, 0, 0 );
-			pRenderContext->ClearBuffers( true, false );
+			pRenderContext->ClearBuffers( true, true );
 		}
 		pRenderContext.SafeRelease();
 
 		tmZone( TELEMETRY_LEVEL0, TMZF_NONE, "VGui_DrawHud", __FUNCTION__ );
 
-		// paint the vgui screen
-		VGui_PreRender();
+		// Paint the shared VGUI texture only once for a stereo pair.
+		if ( bUpdateVRHUDTexture )
+		{
+			VGui_PreRender();
 
 		// Make sure the client .dll root panel is at the proper point before doing the "SolveTraverse" calls
 		vgui::VPANEL root = enginevgui->GetPanel( PANEL_CLIENTDLL );
@@ -2394,22 +2409,29 @@ void CViewRender::RenderView( const CViewSetup &viewRender, int nClearFlags, int
 			vgui::ipanel()->SetSize( root, viewWidth, viewHeight );
 		}
 
-		// The crosshair, etc. needs to get at the current setup stuff
-		AllowCurrentViewAccess( true );
+			// The crosshair, etc. needs to get at the current setup stuff
+			AllowCurrentViewAccess( true );
 
-		// Draw the in-game stuff based on the actual viewport being used
-		render->VGui_Paint( PAINT_INGAMEPANELS );
+			// Draw the in-game stuff based on the actual viewport being used
+			render->VGui_Paint( PAINT_INGAMEPANELS );
 
 		// maybe paint the main menu and cursor too if we're in stereo hud mode
-		if( bPaintMainMenu )
-			render->VGui_Paint( PAINT_UIPANELS | PAINT_CURSOR );
+			if( bPaintMainMenu )
+				render->VGui_Paint( PAINT_UIPANELS | PAINT_CURSOR );
 
-		AllowCurrentViewAccess( false );
+			AllowCurrentViewAccess( false );
 
-		VGui_PostRender();
+			VGui_PostRender();
 
-		g_pClientMode->PostRenderVGui();
+			g_pClientMode->PostRenderVGui();
+		}
 		pRenderContext = materials->GetRenderContext();
+		if ( UseVR() && bUpdateVRHUDTexture && pTexture )
+		{
+			// Restore the active eye target before leaving RenderView.
+			g_pMatSystemSurface->SetFullscreenViewportAndRenderTarget(
+				viewFramebufferX, viewFramebufferY, viewFramebufferWidth, viewFramebufferHeight, saveRenderTarget );
+		}
 		if (pTexture)
 		{
 			pRenderContext->OverrideAlphaWriteEnable( false, true );
@@ -2431,8 +2453,9 @@ void CViewRender::RenderView( const CViewSetup &viewRender, int nClearFlags, int
 				SetupMain3DView( viewRender, ClearFlags );
 
 				// TODO - a bit of a shonky test - basically trying to catch the main menu, the briefing screen, the loadout screen, etc.
-				bool bTranslucent = !g_pMatSystemSurface->IsCursorVisible();
-				g_ClientVirtualReality.RenderHUDQuad( g_pClientMode->ShouldBlackoutAroundHUD(), bTranslucent );
+				// Cursor visibility does not make a transparent HUD texture opaque.
+				// Keep the world visible through unpainted pixels in menus too.
+				g_ClientVirtualReality.RenderHUDQuad( false, true );
 				CleanupMain3DView( viewRender );
 			}
 		}

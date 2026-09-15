@@ -1,0 +1,8 @@
+"UnlitGeneric"
+{
+	"$basetexture" "_rt_OpenVRLeft"
+	"$ignorez" "1"
+	"$nofog" "1"
+	"$vertexcolor" "0"
+	"$vertexalpha" "0"
+}

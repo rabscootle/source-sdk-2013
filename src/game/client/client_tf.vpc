@@ -22,12 +22,23 @@ $Configuration
 {
 	$Compiler
 	{
-		$AdditionalIncludeDirectories	".\hl2;.\hl2\elements;.\tf;.\tf\vgui;..\statemachine;$SRCDIR\game\shared\multiplayer;$SRCDIR\game\shared\tf;$SRCDIR\gcsdk\steamextra;$BASE;.\econ"
+		$AdditionalIncludeDirectories	".\hl2;.\hl2\elements;.\tf;.\tf\vgui;..\statemachine;$SRCDIR\game\shared\multiplayer;$SRCDIR\game\shared\tf;$SRCDIR\gcsdk\steamextra;$SRCDIR\thirdparty\openvr\headers;$BASE;.\econ"
 		$PreprocessorDefinitions		"$BASE;TF_CLIENT_DLL;USES_ECON_ITEMS;ENABLE_GC_MATCHMAKING;GLOWS_ENABLE;USE_DYNAMIC_ASSET_LOADING;VOTING_ENABLED;NEXT_BOT"
 		$PreprocessorDefinitions		"$BASE;SAXXYMAINMENU_ENABLED" [$SAXXYAWARDS_ENABLE]
 		$PreprocessorDefinitions		"$BASE;WORKSHOP_IMPORT_ENABLED" [$WORKSHOP_IMPORT_ENABLE]
 		$PreprocessorDefinitions		"$BASE;SIXENSE" [!$SOURCESDK]
 		$PreprocessorDefinitions		"$BASE;DISABLE_GC_CONNECTION;DISABLE_IN_SOURCESDK;INVENTORY_VIA_WEBAPI" [$SOURCESDK]
+	}
+	$Linker
+	{
+		$AdditionalLibraryDirectories	"$BASE;$SRCDIR\thirdparty\openvr\lib\win64" [$WIN64]
+		$AdditionalDependencies			"$BASE d3d11.lib dxgi.lib delayimp.lib openvr_api.lib" [$WIN64]
+		$DelayLoadedDLLs				"openvr_api.dll" [$WIN64]
+	}
+	$PostBuildEvent [$WIN64]
+	{
+		$CommandLine		"$BASE" "copy /Y $QUOTE$SRCDIR\thirdparty\openvr\bin\win64\openvr_api.dll$QUOTE $QUOTE$OUTBINDIR\openvr_api.dll$QUOTE" "\n"
+		$CommandLine		"$BASE" "copy /Y $QUOTE$SRCDIR\thirdparty\openvr\bin\win64\openvr_api.dll$QUOTE $QUOTE$SRCDIR\..\game\openvr_api.dll$QUOTE" "\n"
 	}
 }
 
@@ -35,6 +46,8 @@ $Project "Client (TF)"
 {
 	$Folder "Source Files"
 	{
+		$File "tf\tf_openvr.cpp" [$WIN64]
+		$File "tf\tf_openvr.h" [$WIN64]
 		-$File	"$SRCDIR\game\shared\weapon_parse_default.cpp"
 	}
 

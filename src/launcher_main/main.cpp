@@ -6,6 +6,7 @@
 
 #if defined( _WIN32 )
 #include <windows.h>
+#include <d3d9.h>
 #include <stdio.h>
 #include <assert.h>
 #include <direct.h>
@@ -43,6 +44,94 @@ extern "C" { _declspec( dllexport ) DWORD NvOptimusEnablement = 0x00000001; }
 
 // same thing for AMD GPUs using v13.35 or newer drivers
 extern "C" { __declspec( dllexport ) int AmdPowerXpressRequestHighPerformance = 1; }
+
+// The engine does not expose its native D3D9 device through the public SDK.
+// Capture it at creation time so client-side VR code can use D3D9Ex shared
+// surfaces instead of synchronously reading every eye through the CPU.
+static IDirect3DDevice9 *s_pOpenVRD3D9Device = NULL;
+typedef HRESULT ( STDMETHODCALLTYPE *CreateDeviceFn )( IDirect3D9 *, UINT, D3DDEVTYPE, HWND, DWORD,
+	D3DPRESENT_PARAMETERS *, IDirect3DDevice9 ** );
+typedef HRESULT ( STDMETHODCALLTYPE *CreateDeviceExFn )( IDirect3D9Ex *, UINT, D3DDEVTYPE, HWND, DWORD,
+	D3DPRESENT_PARAMETERS *, D3DDISPLAYMODEEX *, IDirect3DDevice9Ex ** );
+static CreateDeviceFn s_pOriginalCreateDevice = NULL;
+static CreateDeviceExFn s_pOriginalCreateDeviceEx = NULL;
+
+static void OpenVRRememberD3D9Device( IDirect3DDevice9 *pDevice )
+{
+	if ( pDevice == s_pOpenVRD3D9Device )
+		return;
+	if ( pDevice )
+		pDevice->AddRef();
+	IDirect3DDevice9 *pOldDevice = (IDirect3DDevice9 *)InterlockedExchangePointer(
+		reinterpret_cast<PVOID volatile *>( &s_pOpenVRD3D9Device ), pDevice );
+	if ( pOldDevice )
+		pOldDevice->Release();
+}
+
+static HRESULT STDMETHODCALLTYPE OpenVRCreateDeviceHook( IDirect3D9 *pD3D, UINT adapter, D3DDEVTYPE type,
+	HWND focusWindow, DWORD behaviorFlags, D3DPRESENT_PARAMETERS *pParameters, IDirect3DDevice9 **ppDevice )
+{
+	const HRESULT result = s_pOriginalCreateDevice( pD3D, adapter, type, focusWindow, behaviorFlags, pParameters, ppDevice );
+	if ( SUCCEEDED( result ) && ppDevice )
+		OpenVRRememberD3D9Device( *ppDevice );
+	return result;
+}
+
+static HRESULT STDMETHODCALLTYPE OpenVRCreateDeviceExHook( IDirect3D9Ex *pD3D, UINT adapter, D3DDEVTYPE type,
+	HWND focusWindow, DWORD behaviorFlags, D3DPRESENT_PARAMETERS *pParameters,
+	D3DDISPLAYMODEEX *pFullscreenMode, IDirect3DDevice9Ex **ppDevice )
+{
+	const HRESULT result = s_pOriginalCreateDeviceEx( pD3D, adapter, type, focusWindow, behaviorFlags,
+		pParameters, pFullscreenMode, ppDevice );
+	if ( SUCCEEDED( result ) && ppDevice )
+		OpenVRRememberD3D9Device( *ppDevice );
+	return result;
+}
+
+static void OpenVRPatchVTableSlot( void **pVTable, size_t slot, void *pHook, void **ppOriginal )
+{
+	if ( !pVTable || pVTable[slot] == pHook )
+		return;
+	DWORD oldProtect = 0;
+	if ( VirtualProtect( &pVTable[slot], sizeof( pVTable[slot] ), PAGE_READWRITE, &oldProtect ) )
+	{
+		*ppOriginal = pVTable[slot];
+		pVTable[slot] = pHook;
+		VirtualProtect( &pVTable[slot], sizeof( pVTable[slot] ), oldProtect, &oldProtect );
+	}
+}
+
+static void OpenVRInstallD3D9Capture()
+{
+	IDirect3D9 *pD3D = Direct3DCreate9( D3D_SDK_VERSION );
+	if ( pD3D )
+	{
+		void **pVTable = *reinterpret_cast<void ***>( pD3D );
+		OpenVRPatchVTableSlot( pVTable, 16, reinterpret_cast<void *>( OpenVRCreateDeviceHook ),
+			reinterpret_cast<void **>( &s_pOriginalCreateDevice ) );
+		pD3D->Release();
+	}
+
+	IDirect3D9Ex *pD3DEx = NULL;
+	if ( SUCCEEDED( Direct3DCreate9Ex( D3D_SDK_VERSION, &pD3DEx ) ) && pD3DEx )
+	{
+		void **pVTable = *reinterpret_cast<void ***>( pD3DEx );
+		if ( !s_pOriginalCreateDevice )
+			OpenVRPatchVTableSlot( pVTable, 16, reinterpret_cast<void *>( OpenVRCreateDeviceHook ),
+				reinterpret_cast<void **>( &s_pOriginalCreateDevice ) );
+		OpenVRPatchVTableSlot( pVTable, 20, reinterpret_cast<void *>( OpenVRCreateDeviceExHook ),
+			reinterpret_cast<void **>( &s_pOriginalCreateDeviceEx ) );
+		pD3DEx->Release();
+	}
+}
+
+extern "C" __declspec( dllexport ) IDirect3DDevice9 *OpenVR_GetD3D9Device()
+{
+	IDirect3DDevice9 *pDevice = s_pOpenVRD3D9Device;
+	if ( pDevice )
+		pDevice->AddRef();
+	return pDevice;
+}
 
 #endif
 
@@ -431,6 +520,8 @@ static void HandleRelaunching()
 int APIENTRY WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow )
 {
 	HandleRelaunching();
+	if ( lpCmdLine && strstr( lpCmdLine, "-openvr" ) )
+		OpenVRInstallD3D9Capture();
 
 	// Must add 'bin' to the path....
 	char* pPath = getenv("PATH");

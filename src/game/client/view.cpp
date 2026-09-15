@@ -1210,6 +1210,7 @@ void CViewRender::Render( vrect_t *rect )
 			if ( bDoUndistort )
 			{
 				g_ClientVirtualReality.PostProcessFrame( eEye );
+				g_ClientVirtualReality.MirrorEyeToDesktop( eEye );
 			}
 
 			// logic here all cloned from code in viewrender.cpp around RenderHUDQuad:

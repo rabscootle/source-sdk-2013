@@ -48,6 +48,7 @@ $Configuration
 	$Linker
 	{
 		$SystemLibraries				"SDL2" [$MOD_LAUNCHER && $LINUXALL]
+		$AdditionalDependencies		"$BASE d3d9.lib" [$WIN32 || $WIN64]
 	}
 }
 

@@ -45,6 +45,19 @@ ITexture* CBaseClientRenderTargets::CreateCameraTexture( IMaterialSystem* pMater
 		CREATERENDERTARGETFLAGS_HDR );
 }
 
+ITexture* CBaseClientRenderTargets::CreateUITexture( IMaterialSystem* pMaterialSystem )
+{
+	// The VR client paints VGUI here before drawing it as a world-space quad.
+	return pMaterialSystem->CreateNamedRenderTargetTextureEx2(
+		"_rt_OpenVRUI",
+		1280, 720, RT_SIZE_NO_CHANGE,
+		IMAGE_FORMAT_BGRA8888,
+		// In-game VGUI paints 3D model panels into this target as well.
+		MATERIAL_RT_DEPTH_SEPARATE,
+		TEXTUREFLAGS_CLAMPS | TEXTUREFLAGS_CLAMPT,
+		0 );
+}
+
 //-----------------------------------------------------------------------------
 // Purpose: Called by the engine in material system init and shutdown.
 //			Clients should override this in their inherited version, but the base
@@ -60,6 +73,9 @@ void CBaseClientRenderTargets::InitClientRenderTargets( IMaterialSystem* pMateri
 
 	// Monitors
 	m_CameraTexture.Init( CreateCameraTexture( pMaterialSystem, iCameraTextureSize ) );
+
+	// UI used by stereo/head-tracked rendering.
+	m_UITexture.Init( CreateUITexture( pMaterialSystem ) );
 }
 
 //-----------------------------------------------------------------------------
@@ -75,4 +91,7 @@ void CBaseClientRenderTargets::ShutdownClientRenderTargets()
 
 	// Monitors
 	m_CameraTexture.Shutdown();
+
+	// Stereo/head-tracked UI
+	m_UITexture.Shutdown();
 }

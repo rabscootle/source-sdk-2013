@@ -8,6 +8,7 @@
 #include "tf_rendertargets.h"
 #include "materialsystem/imaterialsystem.h"
 #include "rendertexture.h"
+#include "sourcevr/isourcevirtualreality.h"
 #if defined( REPLAY_ENABLED )
 #include "replay/replay_screenshot.h"
 #endif
@@ -52,6 +53,11 @@ void CTFRenderTargets::InitClientRenderTargets( IMaterialSystem* pMaterialSystem
 	m_tfRenderTargets[index].Init( CreateItemModelPanelTexture( g_pszModelImagePanelRTName, pMaterialSystem, 256 ) );
 
 	CReplayScreenshotTaker::CreateRenderTarget( pMaterialSystem );
+
+	if ( g_pSourceVR )
+	{
+		g_pSourceVR->CreateRenderTargets( pMaterialSystem );
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -60,6 +66,11 @@ void CTFRenderTargets::InitClientRenderTargets( IMaterialSystem* pMaterialSystem
 //-----------------------------------------------------------------------------
 void CTFRenderTargets::ShutdownClientRenderTargets()
 {
+	if ( g_pSourceVR )
+	{
+		g_pSourceVR->ShutdownRenderTargets();
+	}
+
 	BaseClass::ShutdownClientRenderTargets();
 
 	for ( int i = 0; i < m_tfRenderTargets.Count(); i++ )

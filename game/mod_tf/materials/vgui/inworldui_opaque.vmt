@@ -1,0 +1,12 @@
+"UnlitGeneric"
+{
+	"$basetexture" "_rt_OpenVRUI"
+	"$vertexcolor" "1"
+	// Desktop alpha is not menu coverage (model panels write different alpha).
+	// This path must display every captured RGB pixel, irrespective of alpha.
+	"$vertexalpha" "0"
+	"$translucent" "0"
+	"$alphatest" "0"
+	"$ignorez" "1"
+	"$nofog" "1"
+}

@@ -124,6 +124,9 @@
 #include "mouthinfo.h"
 #include "sourcevr/isourcevirtualreality.h"
 #include "client_virtualreality.h"
+#if defined( TF_CLIENT_DLL ) && defined( _WIN32 )
+#include "tf/tf_openvr.h"
+#endif
 #include "mumble.h"
 #include "steamshare.h"
 #include "vgui_controls/BuildGroup.h"
@@ -964,9 +967,22 @@ int CHLClient::Init( CreateInterfaceFn appSystemFactory, CreateInterfaceFn physi
 		return false;
 
 
-	// it's ok if this is NULL. That just means the sourcevr.dll wasn't found
+	// SDK Base reserves -vr for its removed engine-owned SourceVR path. TF uses
+	// -openvr to select the client-owned replacement without entering that path.
+#if defined( TF_CLIENT_DLL ) && defined( _WIN32 )
+	if ( CommandLine()->CheckParm( "-openvr" ) )
+	{
+		g_pSourceVR = TFOpenVR_GetSourceVR();
+		g_pSourceVR->Connect( appSystemFactory );
+		g_pSourceVR->Init();
+	}
+	else
+#endif
+	// It's okay if this is NULL. That just means sourcevr.dll wasn't found.
 	if ( CommandLine()->CheckParm( "-vr" ) )
-		g_pSourceVR = (ISourceVirtualReality *)appSystemFactory(SOURCE_VIRTUAL_REALITY_INTERFACE_VERSION, NULL);
+	{
+		g_pSourceVR = (ISourceVirtualReality *)appSystemFactory( SOURCE_VIRTUAL_REALITY_INTERFACE_VERSION, NULL );
+	}
 
 	factorylist_t factories;
 	factories.appSystemFactory = appSystemFactory;
@@ -1200,6 +1216,15 @@ void CHLClient::PostInit()
 //-----------------------------------------------------------------------------
 void CHLClient::Shutdown( void )
 {
+#if defined( TF_CLIENT_DLL ) && defined( WIN32 )
+	if ( g_pSourceVR == TFOpenVR_GetSourceVR() )
+	{
+		g_pSourceVR->Shutdown();
+		g_pSourceVR->Disconnect();
+		g_pSourceVR = NULL;
+	}
+#endif
+
     if (g_pAchievementsAndStatsInterface)
     {
         g_pAchievementsAndStatsInterface->ReleasePanel();
@@ -1325,6 +1350,7 @@ void CHLClient::HudUpdate( bool bActive )
 		g_pSixenseInput->SixenseFrame( 0, NULL ); 
 	}
 #endif
+
 }
 
 //-----------------------------------------------------------------------------
@@ -2289,6 +2315,17 @@ void CHLClient::FrameStageNotify( ClientFrameStage_t curStage )
 		{
 			VPROF( "CHLClient::FrameStageNotify FRAME_RENDER_END" );
 			OnRenderEnd();
+
+			// Engine-owned SourceVR normally dispatches the stereo menu render.
+			// Run it at the end of the active render stage for the client-owned
+			// OpenVR backend; HudUpdate is too early for render-target painting.
+#if defined( TF_CLIENT_DLL ) && defined( WIN32 )
+			if ( g_pSourceVR == TFOpenVR_GetSourceVR() && UseVR() &&
+				 enginevgui->IsGameUIVisible() && !engine->IsInGame() )
+			{
+				g_ClientVirtualReality.DrawMainMenu();
+			}
+#endif
 
 			PREDICTION_SPEWVALUECHANGES();
 		}

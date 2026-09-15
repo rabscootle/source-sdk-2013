@@ -15,6 +15,8 @@
 	AdditionalLocalization	"tf"
 	InstancePath			"maps/instances/"
 	advcrosshair 			1
+	// Keep the engine's removed SourceVR loader disabled. The TF client owns
+	// OpenVR startup when -openvr is present on the command line.
 	supportsvr				0
 	ReplayRequired 			1
 

@@ -15,6 +15,7 @@
 #include "tier3/tier3.h"
 #include "iclientvirtualreality.h"
 #include "view_shared.h"
+#include "materialsystem/MaterialSystemUtil.h"
 
 enum HeadtrackMovementMode_t
 {
@@ -96,6 +97,7 @@ public:
 	void OverrideViewModelTransform( Vector & vmorigin, QAngle & vmangles, bool bUseLargeOverride );
 	void AlignTorsoAndViewToWeapon();
 	void PostProcessFrame( StereoEye_t eEye );
+	void MirrorEyeToDesktop( StereoEye_t eEye );
 	void OverlayHUDQuadWithUndistort( const CViewSetup &view, bool bDoUndistort, bool bBlackout, bool bTranslucent );
 
 	//---------------------------------------------------------
@@ -105,6 +107,14 @@ public:
 	void Deactivate();
 
 private:
+	// Keep the world-space UI materials referenced while VR is active. Raw
+	// FindMaterial results may otherwise reach reference count zero and bind as
+	// the material-system checker texture.
+	CMaterialReference m_InWorldUIMaterial;
+	CMaterialReference m_InWorldUIOpaqueMaterial;
+	CMaterialReference m_BlackMaterial;
+	CMaterialReference m_MirrorMaterial;
+
 	HeadtrackMovementMode_t m_hmmMovementActual;
 
 	// Where the current mideye is relative to the (game)world.

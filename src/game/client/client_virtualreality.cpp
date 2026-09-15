@@ -9,6 +9,7 @@
 #include "client_virtualreality.h"
 
 #include "materialsystem/itexture.h"
+#include "materialsystem/imaterialvar.h"
 #include "materialsystem/materialsystem_config.h"
 #include "view_shared.h"
 #include "view_scene.h"
@@ -88,6 +89,48 @@ ConVar vr_viewmodel_offset_forward( "vr_viewmodel_offset_forward", "-8", 0 );
 ConVar vr_viewmodel_offset_forward_large( "vr_viewmodel_offset_forward_large", "-15", 0 );
 
 ConVar vr_force_windowed ( "vr_force_windowed", "0", FCVAR_ARCHIVE );
+ConVar openvr_profile_menu( "openvr_profile_menu", "0", 0, "Log aggregate CPU wall times for VR menu and pose waits; disable after testing." );
+
+static ConVar openvr_dump_ui( "openvr_dump_ui", "0", 0, "Set to 1 (before model) or 2 (after model) to save UI and left-eye RGB captures." );
+
+static void DumpOpenVRTarget( IMatRenderContext *context, ITexture *texture, const char *stage, int capture )
+{
+	if ( !texture || texture->IsError() )
+		return;
+	const int width = texture->GetActualWidth();
+	const int height = texture->GetActualHeight();
+	if ( width <= 0 || height <= 0 || width > 8192 || height > 8192 )
+		return;
+	CUtlVector<unsigned char> pixels;
+	pixels.SetCount( width * height * 4 );
+	context->PushRenderTargetAndViewport( texture, 0, 0, width, height );
+	context->ReadPixels( 0, 0, width, height, pixels.Base(), IMAGE_FORMAT_BGRA8888 );
+	context->PopRenderTargetAndViewport();
+	char filename[128];
+	V_snprintf( filename, sizeof( filename ), "openvr_ui_%d_%s.tga", capture, stage );
+	FILE *file = fopen( filename, "wb" );
+	if ( !file )
+	{
+		Warning( "OpenVR could not write %s\n", filename );
+		return;
+	}
+	// Save RGB independently of alpha so inspection cannot hide valid pixels.
+	unsigned char header[18] = { 0 };
+	header[2] = 2;
+	header[12] = width & 255; header[13] = width >> 8;
+	header[14] = height & 255; header[15] = height >> 8;
+	header[16] = 24; header[17] = 0x20;
+	fwrite( header, 1, sizeof( header ), file );
+	int litPixels = 0;
+	for ( int i = 0; i < width * height; ++i )
+	{
+		const unsigned char *pixel = pixels.Base() + i * 4;
+		fwrite( pixel, 1, 3, file );
+		if ( pixel[0] || pixel[1] || pixel[2] ) ++litPixels;
+	}
+	fclose( file );
+	Msg( "OpenVR saved %s (%dx%d, nonblack=%d)\n", filename, width, height, litPixels );
+}
 
 ConVar vr_first_person_uses_world_model ( "vr_first_person_uses_world_model", "1", 0, "Causes the third person model to be drawn instead of the view model" );
 
@@ -325,6 +368,10 @@ InitReturnVal_t	CClientVirtualReality::Init()
 // --------------------------------------------------------------------
 void			CClientVirtualReality::Shutdown()
 {
+	m_InWorldUIMaterial.Shutdown();
+	m_InWorldUIOpaqueMaterial.Shutdown();
+	m_BlackMaterial.Shutdown();
+	m_MirrorMaterial.Shutdown();
 	BaseClass::Shutdown();
 }
 
@@ -334,10 +381,37 @@ void			CClientVirtualReality::Shutdown()
 // --------------------------------------------------------------------
 void CClientVirtualReality::DrawMainMenu()
 {
+	const bool profiling = openvr_profile_menu.GetBool();
+	const double profileStart = profiling ? Plat_FloatTime() : 0;
+	double profileSubmit = 0;
 	// have to draw the UI in stereo via the render texture or it won't fuse properly
 
 	// Draw it into the render target first
-	ITexture *pTexture = materials->FindTexture( "_rt_gui", NULL, false );
+	ITexture *pTexture = materials->FindTexture( "_rt_OpenVRUI", NULL, false );
+	static bool s_bReportedGUITexture = false;
+	if ( !s_bReportedGUITexture )
+	{
+		Msg( "OpenVR _rt_gui: name=%s size=%dx%d format=%d renderTarget=%d error=%d\n",
+			pTexture ? pTexture->GetName() : "<null>",
+			pTexture ? pTexture->GetActualWidth() : 0,
+			pTexture ? pTexture->GetActualHeight() : 0,
+			pTexture ? pTexture->GetImageFormat() : -1,
+			pTexture ? pTexture->IsRenderTarget() : 0,
+			pTexture ? pTexture->IsError() : 1 );
+		FILE *trace = fopen( "openvr_trace.log", "a" );
+		if ( trace )
+		{
+			fprintf( trace, "GUI texture: name=%s size=%dx%d format=%d renderTarget=%d error=%d\n",
+				pTexture ? pTexture->GetName() : "<null>",
+				pTexture ? pTexture->GetActualWidth() : 0,
+				pTexture ? pTexture->GetActualHeight() : 0,
+				pTexture ? pTexture->GetImageFormat() : -1,
+				pTexture ? pTexture->IsRenderTarget() : 0,
+				pTexture ? pTexture->IsError() : 1 );
+			fclose( trace );
+		}
+		s_bReportedGUITexture = true;
+	}
 	Assert( pTexture );
 	if( !pTexture) 
 		return;
@@ -348,40 +422,82 @@ void CClientVirtualReality::DrawMainMenu()
 
 	int viewWidth, viewHeight;
 	vgui::surface()->GetScreenSize( viewWidth, viewHeight );
-
-	// clear depth in the backbuffer before we push the render target
-	pRenderContext->ClearBuffers( false, true, true );
-
-	// constrain where VGUI can render to the view
-	pRenderContext->PushRenderTargetAndViewport( pTexture, NULL, 0, 0, viewActualWidth, viewActualHeight );
-	pRenderContext->OverrideAlphaWriteEnable( true, true );
-
-	// clear the render target 
-	pRenderContext->ClearColor4ub( 0, 0, 0, 0 );
-	pRenderContext->ClearBuffers( true, false );
-
-	tmZone( TELEMETRY_LEVEL0, TMZF_NONE, "VGui_DrawHud", __FUNCTION__ );
-
-	// Make sure the client .dll root panel is at the proper point before doing the "SolveTraverse" calls
-	vgui::VPANEL root = enginevgui->GetPanel( PANEL_CLIENTDLL );
-	if ( root != 0 )
+	// VGUI always renders at its own stable logical resolution. HMD resolution
+	// belongs to the eye targets and must not alter panel layout or model views.
+	// GameUI has already produced the authoritative menu image on the companion
+	// backbuffer by FRAME_RENDER_END. Capturing it avoids a second VGui_Paint,
+	// which otherwise advances model panels twice and produces visible temporal
+	// disagreement/flicker in the headset.
+	const bool copyCompanionUI = true;
+	if ( copyCompanionUI )
 	{
-		vgui::ipanel()->SetSize( root, viewWidth, viewHeight );
-	}
-	// Same for client .dll tools
-	root = enginevgui->GetPanel( PANEL_CLIENTDLL_TOOLS );
-	if ( root != 0 )
-	{
-		vgui::ipanel()->SetSize( root, viewWidth, viewHeight );
+		viewWidth = viewActualWidth;
+		viewHeight = viewActualHeight;
 	}
 
-	// paint the main menu and cursor
-	render->VGui_Paint( (PaintMode_t) ( PAINT_UIPANELS | PAINT_CURSOR ) );
+	if ( copyCompanionUI )
+	{
+		// GameUI has already painted the companion buffer. Reuse that image
+		// instead of traversing every VGUI panel a second time late in the frame.
+		// The second traversal was especially harmful to model panels and caused
+		// their two renders to fight each other in the headset.
+		int backBufferWidth = 0, backBufferHeight = 0;
+		materials->GetBackBufferDimensions( backBufferWidth, backBufferHeight );
+		if ( backBufferWidth <= 0 || backBufferHeight <= 0 )
+			return;
+		Rect_t sourceRect = { 0, 0, backBufferWidth, backBufferHeight };
+		Rect_t destinationRect = { 0, 0, viewActualWidth, viewActualHeight };
+		// Model panels render through their own off-screen target. Do not inherit
+		// that target as the copy source when a loadout/model preview was the last
+		// UI operation this frame; explicitly select the companion backbuffer.
+		pRenderContext->PushRenderTargetAndViewport( NULL, 0, 0, backBufferWidth, backBufferHeight );
+		pRenderContext->CopyRenderTargetToTextureEx( pTexture, 0, &sourceRect, &destinationRect );
+		pRenderContext->PopRenderTargetAndViewport();
+		pRenderContext->Flush( true );
+	}
+	else
+	{
+		// clear depth in the backbuffer before we push the render target
+		pRenderContext->ClearBuffers( false, true, true );
 
-	pRenderContext->OverrideAlphaWriteEnable( false, true );
-	pRenderContext->PopRenderTargetAndViewport();
-	pRenderContext->Flush();
+		// constrain where VGUI can render to the view
+		pRenderContext->PushRenderTargetAndViewport( pTexture, NULL, 0, 0, viewActualWidth, viewActualHeight );
+		pRenderContext->OverrideAlphaWriteEnable( true, true );
+		pRenderContext->ClearColor4ub( 0, 0, 0, 0 );
+		pRenderContext->ClearBuffers( true, false );
 
+		// Begin3DPaint (used by loadout/player-model panels) does not simply
+		// inherit the material-system render target. It uses this fullscreen
+		// target instead. Keep both paths on the same texture for the complete
+		// capture or the 2D panel and its 3D contents land in different buffers.
+		g_pMatSystemSurface->SetFullscreenViewportAndRenderTarget(
+			0, 0, viewActualWidth, viewActualHeight, pTexture );
+
+		tmZone( TELEMETRY_LEVEL0, TMZF_NONE, "VGui_DrawHud", __FUNCTION__ );
+		vgui::VPANEL root = enginevgui->GetPanel( PANEL_CLIENTDLL );
+		if ( root != 0 )
+			vgui::ipanel()->SetSize( root, viewWidth, viewHeight );
+		root = enginevgui->GetPanel( PANEL_CLIENTDLL_TOOLS );
+		if ( root != 0 )
+			vgui::ipanel()->SetSize( root, viewWidth, viewHeight );
+
+		render->VGui_Paint( (PaintMode_t) ( PAINT_UIPANELS | PAINT_CURSOR ) );
+
+		// Normal GameUI continues to use the companion backbuffer outside this
+		// dedicated VR capture pass.
+		g_pMatSystemSurface->SetFullscreenViewportAndRenderTarget(
+			0, 0, viewWidth, viewHeight, NULL );
+		pRenderContext->OverrideAlphaWriteEnable( false, true );
+		pRenderContext->PopRenderTargetAndViewport();
+		pRenderContext->Flush();
+	}
+
+	const int dumpCapture = clamp( openvr_dump_ui.GetInt(), 0, 2 );
+	if ( dumpCapture )
+	{
+		openvr_dump_ui.SetValue( 0 );
+		DumpOpenVRTarget( pRenderContext, pTexture, "capture", dumpCapture );
+	}
 	int leftX, leftY, leftW, leftH, rightX, rightY, rightW, rightH;
 	g_pSourceVR->GetViewportBounds( ISourceVirtualReality::VREye_Left, &leftX, &leftY, &leftW, &leftH );
 	g_pSourceVR->GetViewportBounds( ISourceVirtualReality::VREye_Right, &rightX, &rightY, &rightW, &rightH );
@@ -404,8 +520,10 @@ void CClientVirtualReality::DrawMainMenu()
 	viewEye[STEREO_EYE_RIGHT].y = rightY;
 	viewEye[STEREO_EYE_RIGHT].m_eStereoEye = STEREO_EYE_RIGHT;
 
+	const double profileBeforePose = profiling ? Plat_FloatTime() : 0;
 	// let sourcevr.dll tell us where to put the cameras
 	ProcessCurrentTrackingState( 0 );
+	const double profileAfterPose = profiling ? Plat_FloatTime() : 0;
 	Vector vViewModelOrigin;
 	QAngle qViewModelAngles;
 	OverrideView( &viewEye[ STEREO_EYE_MONO ] , &vViewModelOrigin, &qViewModelAngles, HMM_NOOVERRIDE );
@@ -422,11 +540,39 @@ void CClientVirtualReality::DrawMainMenu()
 		render->Push3DView( viewEye[nView], VIEW_CLEAR_DEPTH|VIEW_CLEAR_COLOR, pColor, NULL, pDepth );
 		RenderHUDQuad( false,  false );
 		render->PopView( NULL );
+		if ( dumpCapture && nView == STEREO_EYE_LEFT )
+			DumpOpenVRTarget( pRenderContextMat, pColor, "eye", dumpCapture );
 
+		const double submitStart = profiling ? Plat_FloatTime() : 0;
 		PostProcessFrame( (StereoEye_t)nView );
+		if ( profiling ) profileSubmit += Plat_FloatTime() - submitStart;
 
 		OverlayHUDQuadWithUndistort( viewEye[nView], true, true, false );
 	}
+	static int profileCount = 0;
+	static double total = 0, capture = 0, pose = 0, submit = 0, peak = 0;
+	if ( profiling )
+	{
+		const double elapsed = Plat_FloatTime() - profileStart;
+		total += elapsed; peak = Max( peak, elapsed );
+		capture += profileBeforePose - profileStart;
+		pose += profileAfterPose - profileBeforePose;
+		submit += profileSubmit;
+		if ( ++profileCount == 120 )
+		{
+			FILE *trace = fopen( "openvr_trace.log", "a" );
+			if ( trace )
+			{
+				fprintf( trace, "Menu CPU ms avg/120: total=%.3f capture_setup=%.3f pose=%.3f submit=%.3f other=%.3f peak=%.3f\n",
+					total * 1000 / profileCount, capture * 1000 / profileCount,
+					pose * 1000 / profileCount, submit * 1000 / profileCount,
+					(total-capture-pose-submit) * 1000 / profileCount, peak * 1000 );
+				fclose( trace );
+			}
+			profileCount = 0; total = capture = pose = submit = peak = 0;
+		}
+	}
+	else { profileCount = 0; total = capture = pose = submit = peak = 0; }
 }
 
 
@@ -537,6 +683,14 @@ bool CClientVirtualReality::OverrideView ( CViewSetup *pViewMiddle, Vector *pVie
 	// Finally convert back to origin+angles that the game understands.
 	pViewMiddle->origin = m_WorldFromMidEye.GetTranslation();
 	VectorAngles ( m_WorldFromMidEye.GetForward(), m_WorldFromMidEye.GetUp(), pViewMiddle->angles );
+	// VectorAngles may represent a small negative HMD pitch as (for example)
+	// 353 degrees. TF's replicated eye-angle sendprops use the signed Source
+	// ranges, so leaving that representation intact floods the console with
+	// clamping warnings every frame and can make loading appear frozen.
+	pViewMiddle->angles[PITCH] = AngleNormalize( pViewMiddle->angles[PITCH] );
+	pViewMiddle->angles[YAW] = AngleNormalize( pViewMiddle->angles[YAW] );
+	pViewMiddle->angles[ROLL] = AngleNormalize( pViewMiddle->angles[ROLL] );
+	pViewMiddle->angles[PITCH] = clamp( pViewMiddle->angles[PITCH], -89.0f, 89.0f );
 
 	*pViewModelAngles = pViewMiddle->angles;
 	if ( vr_viewmodel_translate_with_head.GetBool() )
@@ -1094,13 +1248,46 @@ void CClientVirtualReality::RenderHUDQuad( bool bBlackout, bool bTranslucent )
 		IMaterial *mymat = NULL;
 		if ( bTranslucent )
 		{
-			mymat = materials->FindMaterial( "vgui/inworldui", TEXTURE_GROUP_VGUI );
+			if ( !m_InWorldUIMaterial.IsValid() )
+				m_InWorldUIMaterial.Init( "vgui/inworldui", TEXTURE_GROUP_VGUI );
+			mymat = m_InWorldUIMaterial;
 		}
 		else
 		{
-			mymat = materials->FindMaterial( "vgui/inworldui_opaque", TEXTURE_GROUP_VGUI );
+			if ( !m_InWorldUIOpaqueMaterial.IsValid() )
+				m_InWorldUIOpaqueMaterial.Init( "vgui/inworldui_opaque", TEXTURE_GROUP_VGUI );
+			mymat = m_InWorldUIOpaqueMaterial;
 		}
 		Assert( !mymat->IsErrorMaterial() );
+
+		// mat_reset_rendertargets recreates _rt_gui after this material may have
+		// cached its original texture object.  Bind the current named target
+		// explicitly so the quad never samples the stale checker allocation.
+		ITexture *currentGUITexture = materials->FindTexture( "_rt_OpenVRUI", TEXTURE_GROUP_RENDER_TARGET, false );
+		bool foundCurrentBaseTexture = false;
+		IMaterialVar *currentBaseTextureVar = mymat->FindVar( "$basetexture", &foundCurrentBaseTexture, false );
+		if ( currentGUITexture && !currentGUITexture->IsError() && foundCurrentBaseTexture && currentBaseTextureVar )
+		{
+			currentBaseTextureVar->SetTextureValue( currentGUITexture );
+		}
+
+		static bool s_bReportedGUIMaterial = false;
+		if ( !s_bReportedGUIMaterial )
+		{
+			bool foundBaseTexture = false;
+			IMaterialVar *baseTextureVar = mymat->FindVar( "$basetexture", &foundBaseTexture, false );
+			ITexture *boundTexture = foundBaseTexture && baseTextureVar ? baseTextureVar->GetTextureValue() : NULL;
+			FILE *trace = fopen( "openvr_trace.log", "a" );
+			if ( trace )
+			{
+				fprintf( trace, "GUI material: name=%s error=%d foundBase=%d bound=%s boundError=%d\n",
+					mymat->GetName(), mymat->IsErrorMaterial(), foundBaseTexture,
+					boundTexture ? boundTexture->GetName() : "<null>",
+					boundTexture ? boundTexture->IsError() : 1 );
+				fclose( trace );
+			}
+			s_bReportedGUIMaterial = true;
+		}
 
 		IMesh *pMesh = pRenderContext->GetDynamicMesh( true, NULL, NULL, mymat );
 
@@ -1109,19 +1296,25 @@ void CClientVirtualReality::RenderHUDQuad( bool bBlackout, bool bTranslucent )
 
 		meshBuilder.Position3fv (vLR.Base() );
 		meshBuilder.TexCoord2f( 0, 1, 1 );
-		meshBuilder.AdvanceVertexF<VTX_HAVEPOS, 1>();
+		// The inworldui materials enable vertex color/alpha. Initialize every
+		// vertex instead of sampling data left in the dynamic mesh by other UI.
+		meshBuilder.Color4ub( 255, 255, 255, 255 );
+		meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
 
 		meshBuilder.Position3fv (vLL.Base());
 		meshBuilder.TexCoord2f( 0, 0, 1 );
-		meshBuilder.AdvanceVertexF<VTX_HAVEPOS, 1>();
+		meshBuilder.Color4ub( 255, 255, 255, 255 );
+		meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
 
 		meshBuilder.Position3fv (vUR.Base());
 		meshBuilder.TexCoord2f( 0, 1, 0 );
-		meshBuilder.AdvanceVertexF<VTX_HAVEPOS, 1>();
+		meshBuilder.Color4ub( 255, 255, 255, 255 );
+		meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
 
 		meshBuilder.Position3fv (vUL.Base());
 		meshBuilder.TexCoord2f( 0, 0, 0 );
-		meshBuilder.AdvanceVertexF<VTX_HAVEPOS, 1>();
+		meshBuilder.Color4ub( 255, 255, 255, 255 );
+		meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
 
 		meshBuilder.End();
 		pMesh->Draw();
@@ -1136,7 +1329,9 @@ void CClientVirtualReality::RenderHUDQuad( bool bBlackout, bool bTranslucent )
 		vbLL = 2 * vHead - vUR;
 		vbLR = 2 * vHead - vUL;
 
-		IMaterial *mymat = materials->FindMaterial( "vgui/black", TEXTURE_GROUP_VGUI );
+		if ( !m_BlackMaterial.IsValid() )
+			m_BlackMaterial.Init( "vgui/black", TEXTURE_GROUP_VGUI );
+		IMaterial *mymat = m_BlackMaterial;
 		IMesh *pMesh = pRenderContext->GetDynamicMesh( true, NULL, NULL, mymat );
 
 		// Tube around the outside.
@@ -1362,6 +1557,13 @@ void CClientVirtualReality::OverlayHUDQuadWithUndistort( const CViewSetup &eyeVi
 // --------------------------------------------------------------------
 void CClientVirtualReality::Activate()
 {
+	FILE *openVRTrace = fopen( "openvr_trace.log", "a" );
+	if ( openVRTrace )
+	{
+		fprintf( openVRTrace, "ClientVR: Activate entered\n" );
+		fclose( openVRTrace );
+	}
+
 	// we can only do this if a headtrack DLL is loaded
 	if( !g_pSourceVR )
 		return;
@@ -1412,9 +1614,21 @@ void CClientVirtualReality::Activate()
 		// we couldn't activate, so just punt on this whole thing
 		return;
 	}
+	openVRTrace = fopen( "openvr_trace.log", "a" );
+	if ( openVRTrace )
+	{
+		fprintf( openVRTrace, "ClientVR: backend Activate returned true\n" );
+		fclose( openVRTrace );
+	}
 
 	// general all-game stuff
 	engine->ExecuteClientCmd( "mat_reset_rendertargets\n" );
+	openVRTrace = fopen( "openvr_trace.log", "a" );
+	if ( openVRTrace )
+	{
+		fprintf( openVRTrace, "ClientVR: queued render-target reset\n" );
+		fclose( openVRTrace );
+	}
 
 	// game specific VR config
 	CUtlString sCmd;
@@ -1432,11 +1646,28 @@ void CClientVirtualReality::Activate()
 	mat_vsync.SetValue( 0 );
 #endif
 
-	g_pMatSystemSurface->ForceScreenSizeOverride(true, 640, 480 );
+	const bool clientOwnedOpenVR = CommandLine()->CheckParm( "-openvr" ) != NULL;
+	g_pMatSystemSurface->ForceScreenSizeOverride( true, clientOwnedOpenVR ? 1280 : 640, clientOwnedOpenVR ? 720 : 480 );
 	int nViewportWidth, nViewportHeight;
 
 	g_pSourceVR->GetViewportBounds( ISourceVirtualReality::VREye_Left, NULL, NULL, &nViewportWidth, &nViewportHeight );
-	g_pMatSystemSurface->SetFullscreenViewportAndRenderTarget( 0, 0, nViewportWidth, nViewportHeight, g_pSourceVR->GetRenderTarget( ISourceVirtualReality::VREye_Left, ISourceVirtualReality::RT_Color ) );
+	ITexture *fullscreenTarget = g_pSourceVR->GetRenderTarget( ISourceVirtualReality::VREye_Left, ISourceVirtualReality::RT_Color );
+	if ( clientOwnedOpenVR )
+	{
+		// Keep ordinary TF GameUI rendering on the companion backbuffer. The
+		// dedicated DrawMainMenu pass selects _rt_gui only while capturing VR UI;
+		// globally redirecting VGUI breaks nested panels and model previews.
+		nViewportWidth = 1280;
+		nViewportHeight = 720;
+		fullscreenTarget = NULL;
+	}
+	g_pMatSystemSurface->SetFullscreenViewportAndRenderTarget( 0, 0, nViewportWidth, nViewportHeight, fullscreenTarget );
+	openVRTrace = fopen( "openvr_trace.log", "a" );
+	if ( openVRTrace )
+	{
+		fprintf( openVRTrace, "ClientVR: fullscreen render target set\n" );
+		fclose( openVRTrace );
+	}
 
 	vgui::ivgui()->SetVRMode( true );
 
@@ -1510,7 +1741,58 @@ void CClientVirtualReality::Deactivate()
 // Called when startup is complete
 void CClientVirtualReality::StartupComplete()
 {
+	// The restored client-owned OpenVR backend is registered during startup but
+	// activated manually once the menu is stable. This keeps fatal render/device
+	// errors observable in the console instead of terminating initial startup.
+	if ( CommandLine()->CheckParm( "-openvr" ) )
+		return;
+
 	if ( vr_activate_default.GetBool() || ShouldForceVRActive() )
 		Activate();
+}
+
+void CClientVirtualReality::MirrorEyeToDesktop( StereoEye_t eEye )
+{
+	if ( !UseVR() || eEye != STEREO_EYE_LEFT || !CommandLine()->CheckParm( "-openvr" ) )
+		return;
+
+	ITexture *eyeTexture = g_pSourceVR->GetRenderTarget( ISourceVirtualReality::VREye_Left,
+		ISourceVirtualReality::RT_Color );
+	if ( !eyeTexture || eyeTexture->IsError() )
+		return;
+
+	if ( !m_MirrorMaterial.IsValid() )
+		m_MirrorMaterial.Init( "vgui/openvr_mirror", TEXTURE_GROUP_VGUI );
+	if ( !m_MirrorMaterial.IsValid() || m_MirrorMaterial->IsErrorMaterial() )
+		return;
+
+	bool foundTexture = false;
+	IMaterialVar *textureVar = m_MirrorMaterial->FindVar( "$basetexture", &foundTexture, false );
+	if ( !foundTexture || !textureVar )
+		return;
+	textureVar->SetTextureValue( eyeTexture );
+
+	int width = 0, height = 0;
+	materials->GetBackBufferDimensions( width, height );
+	if ( width <= 0 || height <= 0 )
+		return;
+
+	const int eyeWidth = eyeTexture->GetActualWidth();
+	const int eyeHeight = eyeTexture->GetActualHeight();
+	if ( eyeWidth <= 0 || eyeHeight <= 0 )
+		return;
+	// Fit one complete eye without changing the desktop/VGUI resolution.
+	const double scale = Min( (double)width / eyeWidth, (double)height / eyeHeight );
+	const int mirrorWidth = clamp( (int)( eyeWidth * scale + 0.5 ), 1, width );
+	const int mirrorHeight = clamp( (int)( eyeHeight * scale + 0.5 ), 1, height );
+	const int mirrorX = ( width - mirrorWidth ) / 2;
+	const int mirrorY = ( height - mirrorHeight ) / 2;
+	CMatRenderContextPtr context( materials );
+	context->PushRenderTargetAndViewport( NULL, 0, 0, width, height );
+	context->ClearColor4ub( 0, 0, 0, 255 );
+	context->ClearBuffers( true, false );
+	context->DrawScreenSpaceRectangle( m_MirrorMaterial, mirrorX, mirrorY, mirrorWidth, mirrorHeight,
+		0, 0, eyeWidth - 1, eyeHeight - 1, eyeWidth, eyeHeight );
+	context->PopRenderTargetAndViewport();
 }
 
