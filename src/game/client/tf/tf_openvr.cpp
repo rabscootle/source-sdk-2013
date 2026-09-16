@@ -9,6 +9,7 @@
 
 #include "sourcevr/isourcevirtualreality.h"
 #include "materialsystem/imaterialsystem.h"
+#include "materialsystem/itexture.h"
 #include "materialsystem/MaterialSystemUtil.h"
 #include "tier1/utlvector.h"
 
@@ -25,7 +26,8 @@ namespace
 const float kSourceUnitsPerMeter = 39.3700787f;
 const int kGPUBridgeBufferCount = 3;
 ConVar openvr_render_scale( "openvr_render_scale", "0.5", FCVAR_ARCHIVE,
-	"Temporary per-eye render scale for the CPU OpenVR submission bridge." );
+	"Per-eye dimension multiplier relative to SteamVR recommendation (0.25-2). Re-activate VR after changing.",
+	true, 0.25f, true, 2.0f );
 ConVar openvr_copy_interval( "openvr_copy_interval", "1", FCVAR_ARCHIVE,
 	"Copy D3D9 eye pixels every N submitted frames while using the temporary CPU bridge." );
 ConVar openvr_gpu_bridge( "openvr_gpu_bridge", "0", FCVAR_ARCHIVE,
@@ -353,6 +355,22 @@ void CTFOpenVR::CreateRenderTargets( IMaterialSystem *materialSystem )
 		IMAGE_FORMAT_BGRA8888, MATERIAL_RT_DEPTH_SEPARATE,
 		TEXTUREFLAGS_CLAMPS | TEXTUREFLAGS_CLAMPT | TEXTUREFLAGS_NOMIP, 0 ) );
 
+	for ( int eye = 0; eye < 2; ++eye )
+	{
+		ITexture *texture = m_EyeTexture[eye];
+		const int width = texture ? texture->GetActualWidth() : 0;
+		const int height = texture ? texture->GetActualHeight() : 0;
+		char message[192];
+		Q_snprintf( message, sizeof( message ), "Eye allocation: eye=%d requested=%ux%u actual=%dx%d",
+			eye, m_nRenderWidth, m_nRenderHeight, width, height );
+		OpenVRTrace( message );
+		if ( !texture || texture->IsError() || width != (int)m_nRenderWidth || height != (int)m_nRenderHeight )
+		{
+			Warning( "OpenVR eye target allocation failed or size mismatched. Lower openvr_render_scale and reactivate VR.\n" );
+			ShutdownRenderTargets();
+			return;
+		}
+	}
 	m_Readback.SetCount( m_nRenderWidth * m_nRenderHeight * 4 );
 	OpenVRTrace( m_EyeTexture[VREye_Left].IsValid() && m_EyeTexture[VREye_Right].IsValid()
 		? "RenderTargets: both eye textures created"
@@ -400,7 +418,16 @@ bool CTFOpenVR::Activate()
 
 	OpenVRTrace( "Activate: compositor available" );
 	m_pVRSystem->GetRecommendedRenderTargetSize( &m_nRenderWidth, &m_nRenderHeight );
-	const float renderScale = clamp( openvr_render_scale.GetFloat(), 0.25f, 1.0f );
+	const float renderScale = clamp( openvr_render_scale.GetFloat(), 0.25f, 2.0f );
+	// Bound resource sizes before float-to-integer conversion and allocation.
+	if ( !m_nRenderWidth || !m_nRenderHeight ||
+		m_nRenderWidth * renderScale > 8192.0f || m_nRenderHeight * renderScale > 8192.0f )
+	{
+		Warning( "OpenVR requested eye size exceeds the bridge's 8192-pixel dimension limit. Lower openvr_render_scale.\n" );
+		vr::VR_Shutdown();
+		m_pVRSystem = NULL;
+		return false;
+	}
 	m_nRenderWidth = Max( 1u, static_cast<uint32>( m_nRenderWidth * renderScale ) );
 	m_nRenderHeight = Max( 1u, static_cast<uint32>( m_nRenderHeight * renderScale ) );
 	OpenVRTrace( "Activate: creating D3D11 bridge" );

@@ -1781,10 +1781,16 @@ void CClientVirtualReality::MirrorEyeToDesktop( StereoEye_t eEye )
 	const int eyeHeight = eyeTexture->GetActualHeight();
 	if ( eyeWidth <= 0 || eyeHeight <= 0 )
 		return;
-	// Fit one complete eye without changing the desktop/VGUI resolution.
-	const double scale = Min( (double)width / eyeWidth, (double)height / eyeHeight );
-	const int mirrorWidth = clamp( (int)( eyeWidth * scale + 0.5 ), 1, width );
-	const int mirrorHeight = clamp( (int)( eyeHeight * scale + 0.5 ), 1, height );
+	// Center-crop the existing eye to 4:3 for spectators. Do not change the
+	// headset projection, eye texture, or desktop/VGUI resolution.
+	const double aspect = 4.0 / 3.0;
+	const double cropWidth = Min( (double)eyeWidth, eyeHeight * aspect );
+	const double cropHeight = cropWidth / aspect;
+	const float sourceX = (float)( ( eyeWidth - cropWidth ) * 0.5 );
+	const float sourceY = (float)( ( eyeHeight - cropHeight ) * 0.5 );
+	const double scale = Min( width / cropWidth, height / cropHeight );
+	const int mirrorWidth = clamp( (int)( cropWidth * scale + 0.5 ), 1, width );
+	const int mirrorHeight = clamp( (int)( cropHeight * scale + 0.5 ), 1, height );
 	const int mirrorX = ( width - mirrorWidth ) / 2;
 	const int mirrorY = ( height - mirrorHeight ) / 2;
 	CMatRenderContextPtr context( materials );
@@ -1792,7 +1798,8 @@ void CClientVirtualReality::MirrorEyeToDesktop( StereoEye_t eEye )
 	context->ClearColor4ub( 0, 0, 0, 255 );
 	context->ClearBuffers( true, false );
 	context->DrawScreenSpaceRectangle( m_MirrorMaterial, mirrorX, mirrorY, mirrorWidth, mirrorHeight,
-		0, 0, eyeWidth - 1, eyeHeight - 1, eyeWidth, eyeHeight );
+		sourceX, sourceY, sourceX + (float)cropWidth - 1, sourceY + (float)cropHeight - 1,
+		eyeWidth, eyeHeight );
 	context->PopRenderTargetAndViewport();
 }
 
