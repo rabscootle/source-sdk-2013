@@ -10,6 +10,7 @@
 #include "hud_crosshair.h"
 #include "iclientmode.h"
 #include "view.h"
+#include "view_scene.h"
 #include "vgui_controls/Controls.h"
 #include "vgui/ISurface.h"
 #include "ivrenderview.h"
@@ -33,8 +34,6 @@ ConVar crosshair( "crosshair", "1", FCVAR_ARCHIVE );
 ConVar cl_observercrosshair( "cl_observercrosshair", "1", FCVAR_ARCHIVE );
 
 using namespace vgui;
-
-int ScreenTransform( const Vector& point, Vector& screen );
 
 #ifdef TF_CLIENT_DLL
 // If running TF, we use CHudTFCrosshair instead (which is derived from CHudCrosshair)
@@ -198,7 +197,14 @@ void CHudCrosshair::GetDrawPosition ( float *pX, float *pY, bool *pbBehindCamera
 
 			Vector screen;
 			screen.Init();
-			bBehindCamera = ScreenTransform(tr.endpos, screen) != 0;
+			// The world-space VR HUD has its own projection. Eye-screen NDC
+			// projected onto that panel a second time misplaces off-center aim.
+			// Map to HUD NDC first, then to the current HUD viewport pixels below;
+			// this does not depend on the eye texture's supersampling resolution.
+			if ( UseVR() && g_ClientVirtualReality.ShouldRenderHUDInWorld() )
+				bBehindCamera = HudTransform( tr.endpos, screen ) != 0;
+			else
+				bBehindCamera = ScreenTransform( tr.endpos, screen ) != 0;
 
 			x = 0.5f * ( 1.0f + screen[0] ) * screenWidth + 0.5f;
 			y = 0.5f * ( 1.0f - screen[1] ) * screenHeight + 0.5f;
