@@ -158,6 +158,8 @@ private:
 
 	bool			m_bMotionUpdated;
 	bool m_bAimFollowingHead;
+	QAngle m_AimFollowMouseAccum;
+	double m_flAimFollowLastMouseTime;
 	QAngle m_LastAimFollowViewAngle;
 
 	RTime32			m_rtLastMotionSample;

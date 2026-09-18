@@ -6,6 +6,8 @@
 //=============================================================================//
 #include "cbase.h"
 #include "tf_hud_target_id.h"
+#include "client_virtualreality.h"
+#include "view_scene.h"
 #include "c_tf_playerresource.h"
 #include "iclientmode.h"
 #include "vgui/ILocalize.h"
@@ -588,6 +590,7 @@ bool CTargetID::ShouldDraw( void )
 		}
 
 		UpdateID();
+		if ( UseVR() ) UpdateVRAimPosition();
 	}
 
 	return bReturn;
@@ -688,7 +691,7 @@ void CTargetID::PerformLayout( void )
 	int nOffset = m_bArenaPanelVisible ? YRES (120) : 0; // HACK: move the targetID up a bit so it won't overlap the panel
 	if( UseVR() )
 	{
-		SetPos( ScreenWidth() - iWidth - m_iXOffset,  m_nOriginalY - nOffset + YRES( tf_hud_target_id_offset.GetInt() ) );
+		UpdateVRAimPosition();
 	}
 	else
 	{
@@ -699,7 +702,34 @@ void CTargetID::PerformLayout( void )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
-int	CTargetID::CalculateTargetIndex( C_TFPlayer *pLocalTFPlayer ) 
+void CTargetID::UpdateVRAimPosition()
+{
+	C_TFPlayer *player = C_TFPlayer::GetLocalTFPlayer();
+	if ( !player || player->GetObserverMode() != OBS_MODE_NONE ) return;
+	Vector origin = player->Weapon_ShootPosition();
+	Vector direction = player->GetAutoaimVector( 1.0f );
+	g_ClientVirtualReality.OverrideWeaponHudAimVectors( &origin, &direction );
+	trace_t trace;
+	UTIL_TraceLine( origin, origin + direction * MAX_TRACE_LENGTH, MASK_SHOT, player, COLLISION_GROUP_NONE, &trace );
+	Vector hudPoint;
+	if ( HudTransform( trace.endpos, hudPoint ) != 0 ) return;
+	int width, height;
+	vgui::surface()->GetScreenSize( width, height );
+	if ( width <= 0 || height <= 0 ) return;
+	const int gap = Max( 4, height / 40 );
+	int x = (int)( ( 1.0f + hudPoint.x ) * 0.5f * width ) - GetWide() / 2;
+	int y = (int)( ( 1.0f - hudPoint.y ) * 0.5f * height ) + gap;
+	// Keep the healing/secondary readout below the primary target ID.
+	if ( this == GET_HUDELEMENT( CSecondaryTargetID ) )
+	{
+		CMainTargetID *primary = GET_HUDELEMENT( CMainTargetID );
+		y += ( primary ? primary->GetTall() : GetTall() ) + gap;
+	}
+	SetPos( clamp( x, 0, Max( 0, width - GetWide() ) ),
+		clamp( y, 0, Max( 0, height - GetTall() ) ) );
+}
+
+int	CTargetID::CalculateTargetIndex( C_TFPlayer *pLocalTFPlayer )
 { 
 	int iIndex = pLocalTFPlayer->GetIDTarget(); 
 

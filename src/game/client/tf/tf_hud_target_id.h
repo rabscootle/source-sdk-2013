@@ -60,6 +60,7 @@ private:
 
 	bool IsValidIDTarget( int nEntIndex, float flOldTargetRetainFOV, float &flNewTargetRetainFOV );
 	void UpdateFloatingHealthIconVisibility( bool bVisible );
+	void UpdateVRAimPosition();
 
 protected:
 	vgui::HFont		m_hFont;

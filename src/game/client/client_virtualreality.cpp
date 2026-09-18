@@ -44,6 +44,9 @@ ConVar vr_mouse_recenter_offscreen( "vr_mouse_recenter_offscreen", "1", 0,
 ConVar vr_mouse_recenter_vertical_margin( "vr_mouse_recenter_vertical_margin", "1.25", FCVAR_ARCHIVE,
 	"Vertical head-follow trigger relative to HUD half-height: 1 is the edge, 1.25 allows 25 percent extra above/below.",
 	true, 1.0f, true, 3.0f );
+ConVar vr_mouse_recenter_release_threshold( "vr_mouse_recenter_release_threshold", "1.0", FCVAR_ARCHIVE,
+	"Net mouse aim movement in degrees needed to release head-follow. Accumulation resets after 0.2 seconds without input. Zero restores immediate release.",
+	true, 0.0f, true, 20.0f );
 
 ConVar vr_moveaim_reticle_yaw_limit        ( "vr_moveaim_reticle_yaw_limit",        "10", FCVAR_ARCHIVE, "Beyond this number of degrees, the mouse drags the torso" );
 ConVar vr_moveaim_reticle_pitch_limit      ( "vr_moveaim_reticle_pitch_limit",      "30", FCVAR_ARCHIVE, "Beyond this number of degrees, the mouse clamps" );
@@ -311,6 +314,8 @@ CClientVirtualReality::CClientVirtualReality()
 	m_rtLastMotionSample = 0;
 	m_bMotionUpdated = false;
 	m_bAimFollowingHead = false;
+	m_AimFollowMouseAccum.Init();
+	m_flAimFollowLastMouseTime = 0;
 	m_LastAimFollowViewAngle.Init();
 
 #if defined( USE_SDL )
@@ -953,8 +958,12 @@ bool CClientVirtualReality::OverridePlayerMotion( float flInputSampleFrametime, 
 	Vector vWeaponOrigin = m_WorldFromWeapon.GetTranslation();
 	const QAngle torsoBeforeInput = m_PlayerTorsoAngle;
 	bool recenterAim = false;
-	const bool mouseMoved = fabsf( AngleDiff( curAngles[YAW], oldAngles[YAW] ) ) > 0.001f ||
-		fabsf( AngleDiff( curAngles[PITCH], oldAngles[PITCH] ) ) > 0.001f;
+	const float mouseYaw = AngleDiff( curAngles[YAW], oldAngles[YAW] );
+	const float mousePitch = AngleDiff( curAngles[PITCH], oldAngles[PITCH] );
+	const bool mouseMoved = fabsf( mouseYaw ) > 0.001f || fabsf( mousePitch ) > 0.001f;
+	const double mouseTime = Plat_FloatTime();
+	if ( !m_bAimFollowingHead || mouseTime - m_flAimFollowLastMouseTime > 0.2 )
+		m_AimFollowMouseAccum.Init();
 	const bool viewMoved = fabsf( AngleDiff( m_PlayerViewAngle[YAW], m_LastAimFollowViewAngle[YAW] ) ) > 0.001f ||
 		fabsf( AngleDiff( m_PlayerViewAngle[PITCH], m_LastAimFollowViewAngle[PITCH] ) ) > 0.001f;
 	m_LastAimFollowViewAngle = m_PlayerViewAngle;
@@ -965,7 +974,24 @@ bool CClientVirtualReality::OverridePlayerMotion( float flInputSampleFrametime, 
 		  m_hmmMovementActual == HMM_SHOOTBOUNDEDMOUSE_LOOKFACE_MOVEMOUSE ) )
 	{
 		if ( mouseMoved )
-			m_bAimFollowingHead = false;
+		{
+			if ( m_bAimFollowingHead )
+			{
+				// Net displacement lets opposite-direction click jitter cancel,
+				// while deliberate slow movement can accumulate across samples.
+				m_AimFollowMouseAccum[YAW] += mouseYaw;
+				m_AimFollowMouseAccum[PITCH] += mousePitch;
+				m_flAimFollowLastMouseTime = mouseTime;
+				const float threshold = vr_mouse_recenter_release_threshold.GetFloat();
+				const float movementSquared = m_AimFollowMouseAccum[YAW] * m_AimFollowMouseAccum[YAW] +
+					m_AimFollowMouseAccum[PITCH] * m_AimFollowMouseAccum[PITCH];
+				if ( movementSquared >= threshold * threshold )
+				{
+					m_bAimFollowingHead = false;
+					m_AimFollowMouseAccum.Init();
+				}
+			}
+		}
 		else if ( !m_bAimFollowingHead && viewMoved )
 		{
 			Vector direction, hudPoint;
@@ -977,7 +1003,10 @@ bool CClientVirtualReality::OverridePlayerMotion( float flInputSampleFrametime, 
 		recenterAim = m_bAimFollowingHead;
 	}
 	else
+	{
 		m_bAimFollowingHead = false;
+		m_AimFollowMouseAccum.Init();
+	}
 
 	switch ( m_hmmMovementActual )
 	{
