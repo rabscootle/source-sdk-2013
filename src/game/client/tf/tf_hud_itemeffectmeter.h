@@ -50,9 +50,11 @@ private:
 // Purpose: 
 //-----------------------------------------------------------------------------
 DECLARE_AUTO_LIST( IHudItemEffectMeterAutoList );
+#include "tf_vr_hud_safearea.h"
 class CHudItemEffectMeter : public CHudElement, public EditablePanel, public IHudItemEffectMeterAutoList
 {
 	DECLARE_CLASS_SIMPLE( CHudItemEffectMeter, EditablePanel );
+	CTFVRHudSafeArea m_VRSafeArea;
 
 public:
 	CHudItemEffectMeter( const char *pszElementName, C_TFPlayer* pPlayer );

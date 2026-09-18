@@ -97,6 +97,8 @@ ConVar vr_viewmodel_offset_forward( "vr_viewmodel_offset_forward", "-8", 0 );
 ConVar vr_viewmodel_offset_forward_large( "vr_viewmodel_offset_forward_large", "-15", 0 );
 
 ConVar vr_force_windowed ( "vr_force_windowed", "0", FCVAR_ARCHIVE );
+ConVar vr_hud_bottom_safearea( "vr_hud_bottom_safearea", "1", FCVAR_ARCHIVE,
+	"Use centered 4:3 anchors for VR player status, ammo and item meters." );
 ConVar openvr_profile_menu( "openvr_profile_menu", "0", 0, "Log aggregate CPU wall times for VR menu and pose waits; disable after testing." );
 
 static ConVar openvr_dump_ui( "openvr_dump_ui", "0", 0, "Set to 1 (before model) or 2 (after model) to save UI and left-eye RGB captures." );

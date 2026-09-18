@@ -383,6 +383,7 @@ void CHudItemEffectMeter::CreateHudElementsForClass( C_TFPlayer* pPlayer, CUtlVe
 //-----------------------------------------------------------------------------
 void CHudItemEffectMeter::ApplySchemeSettings( IScheme *pScheme )
 {
+	m_VRSafeArea.Restore( this );
 	// load control settings...
 	LoadControlSettings( GetResFile() );
 
@@ -423,6 +424,7 @@ void CHudItemEffectMeter::ApplySchemeSettings( IScheme *pScheme )
 //-----------------------------------------------------------------------------
 void CHudItemEffectMeter::PerformLayout()
 {
+	m_VRSafeArea.Restore( this );
 	BaseClass::PerformLayout();
 
 	// update icon
@@ -458,6 +460,7 @@ void CHudItemEffectMeter::PerformLayout()
 //-----------------------------------------------------------------------------
 bool CHudItemEffectMeter::ShouldDraw( void )
 {
+	m_VRSafeArea.Apply( this, false );
 	bool bShouldDraw = true;
 
 	C_TFPlayer *pPlayer = C_TFPlayer::GetLocalTFPlayer();

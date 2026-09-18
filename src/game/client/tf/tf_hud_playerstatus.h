@@ -222,6 +222,7 @@ private:
 //-----------------------------------------------------------------------------
 // Purpose:  Parent panel for the player class/health displays
 //-----------------------------------------------------------------------------
+#include "tf_vr_hud_safearea.h"
 class CTFHudPlayerStatus : public CHudElement, public vgui::EditablePanel
 {
 	DECLARE_CLASS_SIMPLE( CTFHudPlayerStatus, vgui::EditablePanel );
@@ -235,6 +236,7 @@ public:
 private:
 
 	CTFHudPlayerClass	*m_pHudPlayerClass;
+	CTFVRHudSafeArea m_VRSafeArea;
 	CTFHudPlayerHealth	*m_pHudPlayerHealth;
 };
 
