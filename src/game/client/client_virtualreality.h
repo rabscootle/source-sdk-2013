@@ -157,6 +157,8 @@ private:
 	int				m_iAlignTorsoAndViewToWeaponCountdown;
 
 	bool			m_bMotionUpdated;
+	bool m_bAimFollowingHead;
+	QAngle m_LastAimFollowViewAngle;
 
 	RTime32			m_rtLastMotionSample;
 

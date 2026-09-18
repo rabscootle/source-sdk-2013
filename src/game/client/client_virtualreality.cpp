@@ -39,6 +39,11 @@ ConVar vr_activate_default( "vr_activate_default",		"0", FCVAR_ARCHIVE, "If this
 
 ConVar vr_moveaim_mode      ( "vr_moveaim_mode",      "3", FCVAR_ARCHIVE, "0=move+shoot from face. 1=move with torso. 2,3,4=shoot with face+mouse cursor. 5+ are probably not that useful." );
 ConVar vr_moveaim_mode_zoom ( "vr_moveaim_mode_zoom", "3", FCVAR_ARCHIVE, "0=move+shoot from face. 1=move with torso. 2,3,4=shoot with face+mouse cursor. 5+ are probably not that useful." );
+ConVar vr_mouse_recenter_offscreen( "vr_mouse_recenter_offscreen", "1", 0,
+	"Experimental: looking away from an off-HUD aim point enables head-follow aiming until mouse/joystick aim input resumes." );
+ConVar vr_mouse_recenter_vertical_margin( "vr_mouse_recenter_vertical_margin", "1.25", FCVAR_ARCHIVE,
+	"Vertical head-follow trigger relative to HUD half-height: 1 is the edge, 1.25 allows 25 percent extra above/below.",
+	true, 1.0f, true, 3.0f );
 
 ConVar vr_moveaim_reticle_yaw_limit        ( "vr_moveaim_reticle_yaw_limit",        "10", FCVAR_ARCHIVE, "Beyond this number of degrees, the mouse drags the torso" );
 ConVar vr_moveaim_reticle_pitch_limit      ( "vr_moveaim_reticle_pitch_limit",      "30", FCVAR_ARCHIVE, "Beyond this number of degrees, the mouse clamps" );
@@ -305,6 +310,8 @@ CClientVirtualReality::CClientVirtualReality()
 
 	m_rtLastMotionSample = 0;
 	m_bMotionUpdated = false;
+	m_bAimFollowingHead = false;
+	m_LastAimFollowViewAngle.Init();
 
 #if defined( USE_SDL )
     m_nNonVRSDLDisplayIndex = 0;
@@ -944,6 +951,33 @@ bool CClientVirtualReality::OverridePlayerMotion( float flInputSampleFrametime, 
 
 	// Whatever position is already here (set up by OverrideView) needs to be preserved.
 	Vector vWeaponOrigin = m_WorldFromWeapon.GetTranslation();
+	const QAngle torsoBeforeInput = m_PlayerTorsoAngle;
+	bool recenterAim = false;
+	const bool mouseMoved = fabsf( AngleDiff( curAngles[YAW], oldAngles[YAW] ) ) > 0.001f ||
+		fabsf( AngleDiff( curAngles[PITCH], oldAngles[PITCH] ) ) > 0.001f;
+	const bool viewMoved = fabsf( AngleDiff( m_PlayerViewAngle[YAW], m_LastAimFollowViewAngle[YAW] ) ) > 0.001f ||
+		fabsf( AngleDiff( m_PlayerViewAngle[PITCH], m_LastAimFollowViewAngle[PITCH] ) ) > 0.001f;
+	m_LastAimFollowViewAngle = m_PlayerViewAngle;
+	if ( vr_mouse_recenter_offscreen.GetBool() && !enginevgui->IsGameUIVisible() &&
+		!g_pMatSystemSurface->IsCursorVisible() && !CurrentlyZoomed() &&
+		( m_hmmMovementActual == HMM_SHOOTMOVEMOUSE_LOOKFACE ||
+		  m_hmmMovementActual == HMM_SHOOTBOUNDEDMOUSE_LOOKFACE_MOVEFACE ||
+		  m_hmmMovementActual == HMM_SHOOTBOUNDEDMOUSE_LOOKFACE_MOVEMOUSE ) )
+	{
+		if ( mouseMoved )
+			m_bAimFollowingHead = false;
+		else if ( !m_bAimFollowingHead && viewMoved )
+		{
+			Vector direction, hudPoint;
+			AngleVectors( oldAngles, &direction );
+			const Vector aimPoint = vWeaponOrigin + direction * MAX_TRACE_LENGTH;
+			m_bAimFollowingHead = HudTransform( aimPoint, hudPoint ) != 0 ||
+				fabsf( hudPoint.x ) > 1.0f || fabsf( hudPoint.y ) > vr_mouse_recenter_vertical_margin.GetFloat();
+		}
+		recenterAim = m_bAimFollowingHead;
+	}
+	else
+		m_bAimFollowingHead = false;
 
 	switch ( m_hmmMovementActual )
 	{
@@ -1089,6 +1123,18 @@ bool CClientVirtualReality::OverridePlayerMotion( float flInputSampleFrametime, 
 		}
 		break;
 	default: Assert ( false ); break;
+	}
+
+	if ( recenterAim )
+	{
+		// Follow the head without turning the torso; mouse input releases this.
+		*pNewAngles = m_PlayerViewAngle;
+		(*pNewAngles)[PITCH] = clamp( AngleNormalize( (*pNewAngles)[PITCH] ), -89.0f, 89.0f );
+		(*pNewAngles)[YAW] = AngleNormalize( (*pNewAngles)[YAW] );
+		(*pNewAngles)[ROLL] = 0;
+		m_PlayerTorsoAngle = torsoBeforeInput;
+		worldFromTorso.SetupMatrixAngles( m_PlayerTorsoAngle );
+		m_WorldFromWeapon.SetupMatrixOrgAngles( vWeaponOrigin, *pNewAngles );
 	}
 
 	// Figure out player motion.
