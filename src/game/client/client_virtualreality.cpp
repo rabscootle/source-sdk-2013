@@ -395,10 +395,12 @@ void CClientVirtualReality::UpdateMenuViewport()
 {
 	if ( !UseVR() || !CommandLine()->CheckParm( "-openvr" ) )
 		return;
-	int width = 1280, height = 720;
+	int width, height;
 	const bool inMap = engine->IsInGame();
-	if ( !inMap )
-		materials->GetBackBufferDimensions( width, height );
+	// GameUI retains its desktop-sized layout across map transitions. The
+	// in-game UI target follows the same video mode; only the HUD child canvas
+	// uses a narrower 4:3 layout, not the global VGUI surface.
+	materials->GetBackBufferDimensions( width, height );
 	if ( width <= 0 || height <= 0 )
 		return;
 	int previousWidth, previousHeight;
@@ -1750,7 +1752,10 @@ void CClientVirtualReality::Activate()
 #endif
 
 	const bool clientOwnedOpenVR = CommandLine()->CheckParm( "-openvr" ) != NULL;
-	g_pMatSystemSurface->ForceScreenSizeOverride( true, clientOwnedOpenVR ? 1280 : 640, clientOwnedOpenVR ? 720 : 480 );
+	int uiWidth = 640, uiHeight = 480;
+	if ( clientOwnedOpenVR )
+		materials->GetBackBufferDimensions( uiWidth, uiHeight );
+	g_pMatSystemSurface->ForceScreenSizeOverride( true, uiWidth, uiHeight );
 	int nViewportWidth, nViewportHeight;
 
 	g_pSourceVR->GetViewportBounds( ISourceVirtualReality::VREye_Left, NULL, NULL, &nViewportWidth, &nViewportHeight );
@@ -1760,8 +1765,8 @@ void CClientVirtualReality::Activate()
 		// Keep ordinary TF GameUI rendering on the companion backbuffer. The
 		// dedicated DrawMainMenu pass selects _rt_gui only while capturing VR UI;
 		// globally redirecting VGUI breaks nested panels and model previews.
-		nViewportWidth = 1280;
-		nViewportHeight = 720;
+		nViewportWidth = uiWidth;
+		nViewportHeight = uiHeight;
 		fullscreenTarget = NULL;
 	}
 	g_pMatSystemSurface->SetFullscreenViewportAndRenderTarget( 0, 0, nViewportWidth, nViewportHeight, fullscreenTarget );

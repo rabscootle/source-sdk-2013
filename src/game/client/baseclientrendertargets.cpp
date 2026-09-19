@@ -50,11 +50,12 @@ ITexture* CBaseClientRenderTargets::CreateUITexture( IMaterialSystem* pMaterialS
 	// The VR client paints VGUI here before drawing it as a world-space quad.
 	return pMaterialSystem->CreateNamedRenderTargetTextureEx2(
 		"_rt_OpenVRUI",
-		1280, 720, RT_SIZE_NO_CHANGE,
+		// Match VGUI's desktop-sized layout before and after a map loads.
+		1, 1, RT_SIZE_FULL_FRAME_BUFFER,
 		IMAGE_FORMAT_BGRA8888,
 		// In-game VGUI paints 3D model panels into this target as well.
 		MATERIAL_RT_DEPTH_SEPARATE,
-		TEXTUREFLAGS_CLAMPS | TEXTUREFLAGS_CLAMPT,
+		TEXTUREFLAGS_CLAMPS | TEXTUREFLAGS_CLAMPT | TEXTUREFLAGS_NOMIP,
 		0 );
 }
 
