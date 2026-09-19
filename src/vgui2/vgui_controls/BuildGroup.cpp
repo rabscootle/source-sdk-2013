@@ -5,7 +5,7 @@
 // $NoKeywords: $
 //
 //=============================================================================//
- //========= Copyright © 1996-2003, Valve LLC, All rights reserved. ============
+ //========= Copyright Â© 1996-2003, Valve LLC, All rights reserved. ============
 //
 // The copyright to the contents herein is the property of Valve, L.L.C.
 // The contents may be used and/or copied only with the written permission of
@@ -34,6 +34,7 @@
 
 #include <vgui_controls/BuildGroup.h>
 #include <vgui_controls/Panel.h>
+#include <vgui_controls/PanelScreenSizeScope.h>
 #include <vgui_controls/PHandle.h>
 #include <vgui_controls/Label.h>
 #include <vgui_controls/EditablePanel.h>
@@ -1267,6 +1268,7 @@ void BuildGroup::ApplySettings( KeyValues *resourceData )
 			if (!Q_stricmp(panelName, keyName))
 			{
 				// apply the settings
+				PanelScreenSizeScope screenSize( panel );
 				panel->ApplySettings(controlKeys);
 				bFound = true;
 				break;

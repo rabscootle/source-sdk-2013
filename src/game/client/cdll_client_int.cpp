@@ -2375,6 +2375,7 @@ void CHLClient::FrameStageNotify( ClientFrameStage_t curStage )
 		break;
 	case FRAME_START:
 		{
+			g_ClientVirtualReality.UpdateMenuViewport();
 			// Mark the frame as open for client fx additions
 			SetFXCreationAllowed( true );
 			SetBeamCreationAllowed( true );

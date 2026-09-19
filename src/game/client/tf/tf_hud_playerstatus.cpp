@@ -1116,7 +1116,6 @@ CTFHudPlayerStatus::CTFHudPlayerStatus( const char *pElementName ) : CHudElement
 //-----------------------------------------------------------------------------
 void CTFHudPlayerStatus::ApplySchemeSettings( IScheme *pScheme )
 {
-	m_VRSafeArea.Restore( this );
 	BaseClass::ApplySchemeSettings( pScheme );
 
 	// HACK: Work around the scheme application order failing
@@ -1133,7 +1132,6 @@ void CTFHudPlayerStatus::ApplySchemeSettings( IScheme *pScheme )
 //-----------------------------------------------------------------------------
 bool CTFHudPlayerStatus::ShouldDraw( void )
 {
-	m_VRSafeArea.Apply( this, true );
 	CTFPlayer *pTFPlayer = CTFPlayer::GetLocalTFPlayer();
 	if ( pTFPlayer && pTFPlayer->m_Shared.InCond( TF_COND_HALLOWEEN_GHOST_MODE ) )
 		return false;

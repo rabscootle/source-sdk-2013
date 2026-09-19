@@ -89,6 +89,7 @@
 #include "tf_viewmodel.h"
 #include "player_vs_environment/c_tf_upgrades.h"
 #include "sourcevr/isourcevirtualreality.h"
+#include "client_virtualreality.h"
 #include "tempent.h"
 #include "confirm_dialog.h"
 #include "c_tf_weapon_builder.h"
@@ -7071,6 +7072,15 @@ void C_TFPlayer::UpdateIDTarget()
 	Vector vecStart, vecEnd;
 	VectorMA( MainViewOrigin(), MAX_TRACE_LENGTH, MainViewForward(), vecEnd );
 	VectorMA( MainViewOrigin(), 10,   MainViewForward(), vecStart );
+	if ( UseVR() && !IsObserver() )
+	{
+		// Match CHudCrosshair's world-space aim ray, not the HMD view axis.
+		// Eye resolution, HUD layout, and desktop mirror cropping are irrelevant.
+		vecStart = Weapon_ShootPosition();
+		Vector aimDirection = GetAutoaimVector( 1.0f );
+		g_ClientVirtualReality.OverrideWeaponHudAimVectors( &vecStart, &aimDirection );
+		vecEnd = vecStart + aimDirection * MAX_TRACE_LENGTH;
+	}
 
 	// If we're in observer mode, ignore our observer target. Otherwise, ignore ourselves.
 	if ( IsObserver() )

@@ -97,8 +97,6 @@ ConVar vr_viewmodel_offset_forward( "vr_viewmodel_offset_forward", "-8", 0 );
 ConVar vr_viewmodel_offset_forward_large( "vr_viewmodel_offset_forward_large", "-15", 0 );
 
 ConVar vr_force_windowed ( "vr_force_windowed", "0", FCVAR_ARCHIVE );
-ConVar vr_hud_bottom_safearea( "vr_hud_bottom_safearea", "1", FCVAR_ARCHIVE,
-	"Use centered 4:3 anchors for VR player status, ammo and item meters." );
 ConVar openvr_profile_menu( "openvr_profile_menu", "0", 0, "Log aggregate CPU wall times for VR menu and pose waits; disable after testing." );
 
 static ConVar openvr_dump_ui( "openvr_dump_ui", "0", 0, "Set to 1 (before model) or 2 (after model) to save UI and left-eye RGB captures." );
@@ -393,6 +391,33 @@ void			CClientVirtualReality::Shutdown()
 // --------------------------------------------------------------------
 // Purpose: Draws the main menu in Stereo
 // --------------------------------------------------------------------
+void CClientVirtualReality::UpdateMenuViewport()
+{
+	if ( !UseVR() || !CommandLine()->CheckParm( "-openvr" ) )
+		return;
+	int width = 1280, height = 720;
+	const bool inMap = engine->IsInGame();
+	if ( !inMap )
+		materials->GetBackBufferDimensions( width, height );
+	if ( width <= 0 || height <= 0 )
+		return;
+	int previousWidth, previousHeight;
+	vgui::surface()->GetScreenSize( previousWidth, previousHeight );
+	if ( previousWidth != width || previousHeight != height )
+	{
+		// Set this before VGUI layout/painting, never midway through a capture.
+		g_pMatSystemSurface->ForceScreenSizeOverride( true, width, height );
+		vgui::VPANEL root = enginevgui->GetPanel( PANEL_CLIENTDLL );
+		if ( root ) vgui::ipanel()->SetSize( root, width, height );
+		root = enginevgui->GetPanel( PANEL_CLIENTDLL_TOOLS );
+		if ( root ) vgui::ipanel()->SetSize( root, width, height );
+	}
+	// Model previews must use the same full desktop viewport as the surrounding
+	// 2D menu. In-map rendering retains its existing target/viewport handling.
+	if ( !inMap )
+		g_pMatSystemSurface->SetFullscreenViewportAndRenderTarget( 0, 0, width, height, NULL );
+}
+
 void CClientVirtualReality::DrawMainMenu()
 {
 	const bool profiling = openvr_profile_menu.GetBool();
@@ -401,7 +426,7 @@ void CClientVirtualReality::DrawMainMenu()
 	// have to draw the UI in stereo via the render texture or it won't fuse properly
 
 	// Draw it into the render target first
-	ITexture *pTexture = materials->FindTexture( "_rt_OpenVRUI", NULL, false );
+	ITexture *pTexture = materials->FindTexture( "_rt_OpenVRMenu", NULL, false );
 	static bool s_bReportedGUITexture = false;
 	if ( !s_bReportedGUITexture )
 	{
@@ -1340,7 +1365,8 @@ void CClientVirtualReality::RenderHUDQuad( bool bBlackout, bool bTranslucent )
 		// mat_reset_rendertargets recreates _rt_gui after this material may have
 		// cached its original texture object.  Bind the current named target
 		// explicitly so the quad never samples the stale checker allocation.
-		ITexture *currentGUITexture = materials->FindTexture( "_rt_OpenVRUI", TEXTURE_GROUP_RENDER_TARGET, false );
+		ITexture *currentGUITexture = materials->FindTexture(
+			engine->IsInGame() ? "_rt_OpenVRUI" : "_rt_OpenVRMenu", TEXTURE_GROUP_RENDER_TARGET, false );
 		bool foundCurrentBaseTexture = false;
 		IMaterialVar *currentBaseTextureVar = mymat->FindVar( "$basetexture", &foundCurrentBaseTexture, false );
 		if ( currentGUITexture && !currentGUITexture->IsError() && foundCurrentBaseTexture && currentBaseTextureVar )
@@ -1739,6 +1765,7 @@ void CClientVirtualReality::Activate()
 		fullscreenTarget = NULL;
 	}
 	g_pMatSystemSurface->SetFullscreenViewportAndRenderTarget( 0, 0, nViewportWidth, nViewportHeight, fullscreenTarget );
+	UpdateMenuViewport();
 	openVRTrace = fopen( "openvr_trace.log", "a" );
 	if ( openVRTrace )
 	{

@@ -15,6 +15,11 @@
 #include "vgui_basepanel.h"
 #include "hud_crosshair.h"
 #include <vgui/ISurface.h>
+#include <vgui_controls/PanelScreenSizeScope.h>
+
+#if defined( TF_CLIENT_DLL )
+extern void UpdateTFVRHudLayout();
+#endif
 
 #if defined( REPLAY_ENABLED )
 #include "replay/ienginereplay.h"
@@ -47,6 +52,9 @@ static ConVar fov_watcher( "_fov", "0", 0, "Automates fov command to server.", F
 //-----------------------------------------------------------------------------
 void CHud::Think(void)
 {
+#if defined( TF_CLIENT_DLL )
+	UpdateTFVRHudLayout();
+#endif
 #if defined( REPLAY_ENABLED )
 	// Don't draw this
 	extern IEngineClientReplay *g_EngineClientReplay;
@@ -56,6 +64,7 @@ void CHud::Think(void)
 	// Determine the visibility of all hud elements
 	for ( int i = 0; i < m_HudList.Size(); i++ )
 	{
+		vgui::PanelScreenSizeScope screenSize( dynamic_cast<vgui::Panel *>( m_HudList[i] ) );
 		// Visible?
 		bool visible = m_HudList[i]->ShouldDraw();
 

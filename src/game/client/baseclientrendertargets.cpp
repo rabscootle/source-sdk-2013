@@ -76,6 +76,12 @@ void CBaseClientRenderTargets::InitClientRenderTargets( IMaterialSystem* pMateri
 
 	// UI used by stereo/head-tracked rendering.
 	m_UITexture.Init( CreateUITexture( pMaterialSystem ) );
+	// Pre-map menus are captured from the desktop, not repainted into the
+	// in-game HUD target. Follow video-mode changes without a 720p downsample.
+	m_MenuUITexture.Init( pMaterialSystem->CreateNamedRenderTargetTextureEx2(
+		"_rt_OpenVRMenu", 1, 1, RT_SIZE_FULL_FRAME_BUFFER,
+		IMAGE_FORMAT_BGRA8888, MATERIAL_RT_DEPTH_NONE,
+		TEXTUREFLAGS_CLAMPS | TEXTUREFLAGS_CLAMPT | TEXTUREFLAGS_NOMIP, 0 ) );
 }
 
 //-----------------------------------------------------------------------------
@@ -94,4 +100,5 @@ void CBaseClientRenderTargets::ShutdownClientRenderTargets()
 
 	// Stereo/head-tracked UI
 	m_UITexture.Shutdown();
+	m_MenuUITexture.Shutdown();
 }

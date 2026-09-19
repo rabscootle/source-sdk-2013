@@ -85,7 +85,6 @@ void CTFHudWeaponAmmo::Reset()
 //-----------------------------------------------------------------------------
 void CTFHudWeaponAmmo::ApplySchemeSettings( IScheme *pScheme )
 {
-	m_VRSafeArea.Restore( this );
 	BaseClass::ApplySchemeSettings( pScheme );
 
 	// load control settings...
@@ -120,7 +119,6 @@ void CTFHudWeaponAmmo::ApplySchemeSettings( IScheme *pScheme )
 //-----------------------------------------------------------------------------
 bool CTFHudWeaponAmmo::ShouldDraw( void )
 {
-	m_VRSafeArea.Apply( this, false );
 	// Get the player and active weapon.
 	C_TFPlayer *pPlayer = C_TFPlayer::GetLocalTFPlayer();
 

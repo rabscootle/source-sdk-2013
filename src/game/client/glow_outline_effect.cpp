@@ -12,6 +12,11 @@
 #include "materialsystem/itexture.h"
 #include "view_shared.h"
 #include "viewpostprocess.h"
+#include "materialsystem/MaterialSystemUtil.h"
+#if defined( TF_CLIENT_DLL )
+#include "tf/tf_openvr.h"
+#include "sourcevr/isourcevirtualreality.h"
+#endif
 
 #define FULL_FRAME_TEXTURE "_rt_FullFrameFB"
 
@@ -81,7 +86,7 @@ static void SetRenderTargetAndViewPort( ITexture *rt, int w, int h )
 	pRenderContext->Viewport(0,0,w,h);
 }
 
-void CGlowObjectManager::RenderGlowModels( const CViewSetup *pSetup, int nSplitScreenSlot, CMatRenderContextPtr &pRenderContext )
+void CGlowObjectManager::RenderGlowModels( const CViewSetup *pSetup, int nSplitScreenSlot, CMatRenderContextPtr &pRenderContext, ITexture *pTarget, int width, int height )
 {
 	//==========================================================================================//
 	// This renders solid pixels with the correct coloring for each object that needs the glow.	//
@@ -95,11 +100,9 @@ void CGlowObjectManager::RenderGlowModels( const CViewSetup *pSetup, int nSplitS
 	render->GetColorModulation( vOrigColor.Base() );
 	float flOrigBlend = render->GetBlend();
 
-	// Get pointer to FullFrameFB
-	ITexture *pRtFullFrame = NULL;
-	pRtFullFrame = materials->FindTexture( FULL_FRAME_TEXTURE, TEXTURE_GROUP_RENDER_TARGET );
-
-	SetRenderTargetAndViewPort( pRtFullFrame, pSetup->width, pSetup->height );
+	// Keep the current eye's view/projection matrices. Only the color target
+	// changes; the stencil mask was rendered using these same matrices.
+	SetRenderTargetAndViewPort( pTarget, width, height );
 
 	pRenderContext->ClearColor3ub( 0, 0, 0 );
 	pRenderContext->ClearBuffers( true, false, false );
@@ -154,6 +157,21 @@ void CGlowObjectManager::RenderGlowModels( const CViewSetup *pSetup, int nSplitS
 
 void CGlowObjectManager::ApplyEntityGlowEffects( const CViewSetup *pSetup, int nSplitScreenSlot, CMatRenderContextPtr &pRenderContext, float flBloomScale, int x, int y, int w, int h )
 {
+	bool bVRGlow = false;
+#if defined( TF_CLIENT_DLL )
+	bVRGlow = UseVR() && g_pSourceVR == TFOpenVR_GetSourceVR() && pSetup->m_eStereoEye != STEREO_EYE_MONO;
+#endif
+	ITexture *pGlowTarget = materials->FindTexture( bVRGlow ? "_rt_OpenVRGlow" : FULL_FRAME_TEXTURE,
+		TEXTURE_GROUP_RENDER_TARGET, false );
+	if ( bVRGlow && ( !pGlowTarget || pGlowTarget->IsError() ||
+		pGlowTarget->GetActualWidth() != w || pGlowTarget->GetActualHeight() != h ) )
+	{
+		static bool warned = false;
+		if ( !warned )
+			Warning( "OpenVR glow target does not match the eye viewport; skipping outlines. Reactivate VR to recreate targets.\n" );
+		warned = true;
+		return;
+	}
 	//=======================================================//
 	// Render objects into stencil buffer					 //
 	//=======================================================//
@@ -264,7 +282,8 @@ void CGlowObjectManager::ApplyEntityGlowEffects( const CViewSetup *pSetup, int n
 	//=============================================
 	{
 		PIXEvent pixEvent( pRenderContext, "RenderGlowModels" );
-		RenderGlowModels( pSetup, nSplitScreenSlot, pRenderContext );
+		RenderGlowModels( pSetup, nSplitScreenSlot, pRenderContext, pGlowTarget,
+			bVRGlow ? w : pSetup->width, bVRGlow ? h : pSetup->height );
 	}
 	
 	// Get viewport
@@ -283,6 +302,15 @@ void CGlowObjectManager::ApplyEntityGlowEffects( const CViewSetup *pSetup, int n
 		// stencil bits set in the range we care about.                                                          //
 		//=======================================================================================================//
 		IMaterial *pMatHaloAddToScreen = materials->FindMaterial( "dev/halo_add_to_screen", TEXTURE_GROUP_OTHER, true );
+		if ( bVRGlow )
+		{
+			static CMaterialReference vrHalo;
+			if ( !vrHalo.IsValid() )
+				vrHalo.Init( "dev/openvr_halo_add_to_screen", TEXTURE_GROUP_OTHER );
+			pMatHaloAddToScreen = vrHalo;
+			// Rebind after any target recreation (e.g. supersampling change).
+			pMatHaloAddToScreen->FindVar( "$basetexture", NULL )->SetTextureValue( pGlowTarget );
+		}
 
 		// Do not fade the glows out at all (weight = 1.0)
 		IMaterialVar *pDimVar = pMatHaloAddToScreen->FindVar( "$C0_X", NULL );
@@ -301,6 +329,14 @@ void CGlowObjectManager::ApplyEntityGlowEffects( const CViewSetup *pSetup, int n
 		stencilState.SetStencilState( pRenderContext );
 
 		// Draw quad
+		if ( bVRGlow )
+		{
+			// haloaddoutline samples the FULL-resolution color mask directly.
+			// Never normalize eye pixels against desktop/quarter-size textures.
+			pRenderContext->DrawScreenSpaceRectangle( pMatHaloAddToScreen, 0, 0, nViewportWidth, nViewportHeight,
+				0.0f, 0.0f, w - 1, h - 1, pGlowTarget->GetActualWidth(), pGlowTarget->GetActualHeight() );
+		}
+		else
 		pRenderContext->DrawScreenSpaceRectangle( pMatHaloAddToScreen, 0, 0, nViewportWidth, nViewportHeight,
 			0.0f, -0.5f, nSrcWidth / 4 - 1, nSrcHeight / 4 - 1,
 			pRtQuarterSize1->GetActualWidth(),

@@ -17,7 +17,6 @@
 //-----------------------------------------------------------------------------
 // Purpose:  Displays weapon ammo data
 //-----------------------------------------------------------------------------
-#include "tf_vr_hud_safearea.h"
 class CTFHudWeaponAmmo : public CHudElement, public vgui::EditablePanel
 {
 	DECLARE_CLASS_SIMPLE( CTFHudWeaponAmmo, vgui::EditablePanel );
@@ -38,7 +37,6 @@ protected:
 private:
 	
 	void UpdateAmmoLabels( bool bPrimary, bool bReserve, bool bNoClip );
-	CTFVRHudSafeArea m_VRSafeArea;
 	void ShowLowAmmoIndicator( void );
 	void SizeLowAmmoIndicator( float flCurrentAmount, float flMaxAmount );
 	void HideLowAmmoIndicator( void );

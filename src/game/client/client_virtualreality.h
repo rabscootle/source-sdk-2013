@@ -72,6 +72,7 @@ public:
 	// IClientVirtualReality implementation
 	//---------------------------------------------------------
 	virtual void DrawMainMenu() OVERRIDE;
+	void UpdateMenuViewport();
 
 
 	//---------------------------------------------------------

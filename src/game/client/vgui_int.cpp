@@ -30,6 +30,7 @@
 
 #if defined( TF_CLIENT_DLL )
 #include "tf_gamerules.h"
+#include "sourcevr/isourcevirtualreality.h"
 #endif
 
 using namespace vgui;
@@ -299,6 +300,11 @@ CON_COMMAND( cl_panelanimation, "Shows panel animation variables: <panelname | b
 void GetHudSize( int& w, int &h )
 {
 	vgui::surface()->GetScreenSize( w, h );
+#if defined( TF_CLIENT_DLL )
+	// A VR logical canvas must not be overwritten with the desktop root.
+	if ( UseVR() && vgui::surface()->IsScreenSizeOverrideActive() )
+		return;
+#endif
 
 	VPANEL hudParent = enginevgui->GetPanel( PANEL_CLIENTDLL );
 	if ( hudParent )

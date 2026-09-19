@@ -363,6 +363,14 @@ bool CTargetID::IsValidIDTarget( int nEntIndex, float flOldTargetRetainFOV, floa
 				// It has a FOV that maintains previous targets
 				Vector vForward;
 				pLocalTFPlayer->EyeVectors( &vForward );
+				if ( UseVR() && !pLocalTFPlayer->IsObserver() )
+				{
+					Vector aimOrigin = pLocalTFPlayer->Weapon_ShootPosition();
+					vForward = pLocalTFPlayer->GetAutoaimVector( 1.0f );
+					g_ClientVirtualReality.OverrideWeaponHudAimVectors( &aimOrigin, &vForward );
+					vDiff = pEnt->EyePosition() - aimOrigin;
+					VectorNormalize( vDiff );
+				}
 
 				float fAngle = 1.0f - vDiff.Dot( vForward );
 				fAngle = RemapVal( fAngle, 0.0f, 1.0f, 0.0f, 90.0f );
@@ -706,6 +714,21 @@ void CTargetID::UpdateVRAimPosition()
 {
 	C_TFPlayer *player = C_TFPlayer::GetLocalTFPlayer();
 	if ( !player || player->GetObserverMode() != OBS_MODE_NONE ) return;
+	int width, height;
+	vgui::surface()->GetScreenSize( width, height );
+	if ( width <= 0 || height <= 0 ) return;
+
+	// The secondary panel serves two roles: our healing target, or our healer.
+	// Both get the same stable communication readout above the bottom-center
+	// objectives. Ordinary target IDs still follow the crosshair below.
+	if ( this == GET_HUDELEMENT( CSecondaryTargetID ) )
+	{
+		const int x = ( width - GetWide() ) / 2;
+		const int y = (int)( height * 0.82f ) - GetTall();
+		SetPos( Max( 0, x ), clamp( y, 0, Max( 0, height - GetTall() ) ) );
+		return;
+	}
+
 	Vector origin = player->Weapon_ShootPosition();
 	Vector direction = player->GetAutoaimVector( 1.0f );
 	g_ClientVirtualReality.OverrideWeaponHudAimVectors( &origin, &direction );
@@ -713,18 +736,9 @@ void CTargetID::UpdateVRAimPosition()
 	UTIL_TraceLine( origin, origin + direction * MAX_TRACE_LENGTH, MASK_SHOT, player, COLLISION_GROUP_NONE, &trace );
 	Vector hudPoint;
 	if ( HudTransform( trace.endpos, hudPoint ) != 0 ) return;
-	int width, height;
-	vgui::surface()->GetScreenSize( width, height );
-	if ( width <= 0 || height <= 0 ) return;
 	const int gap = Max( 4, height / 40 );
 	int x = (int)( ( 1.0f + hudPoint.x ) * 0.5f * width ) - GetWide() / 2;
 	int y = (int)( ( 1.0f - hudPoint.y ) * 0.5f * height ) + gap;
-	// Keep the healing/secondary readout below the primary target ID.
-	if ( this == GET_HUDELEMENT( CSecondaryTargetID ) )
-	{
-		CMainTargetID *primary = GET_HUDELEMENT( CMainTargetID );
-		y += ( primary ? primary->GetTall() : GetTall() ) + gap;
-	}
 	SetPos( clamp( x, 0, Max( 0, width - GetWide() ) ),
 		clamp( y, 0, Max( 0, height - GetTall() ) ) );
 }

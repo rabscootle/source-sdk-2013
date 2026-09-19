@@ -187,6 +187,8 @@ void CItemEffectMeterManager::FireGameEvent( IGameEvent *event )
 //-----------------------------------------------------------------------------
 CHudItemEffectMeter::CHudItemEffectMeter( const char *pszElementName, C_TFPlayer* pPlayer ) : CHudElement( pszElementName ), BaseClass( NULL, "HudItemEffectMeter" )
 {
+	m_nAutoPositionOffset = 0;
+	m_nAutoPositionX = 0;
 	Panel *pParent = g_pClientMode->GetViewport();
 	SetParent( pParent );
 
@@ -383,7 +385,7 @@ void CHudItemEffectMeter::CreateHudElementsForClass( C_TFPlayer* pPlayer, CUtlVe
 //-----------------------------------------------------------------------------
 void CHudItemEffectMeter::ApplySchemeSettings( IScheme *pScheme )
 {
-	m_VRSafeArea.Restore( this );
+	RestoreAutoPosition();
 	// load control settings...
 	LoadControlSettings( GetResFile() );
 
@@ -422,9 +424,20 @@ void CHudItemEffectMeter::ApplySchemeSettings( IScheme *pScheme )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
+void CHudItemEffectMeter::RestoreAutoPosition()
+{
+	int x, y;
+	GetPos( x, y );
+	if ( m_nAutoPositionOffset && x == m_nAutoPositionX )
+		SetPos( x - m_nAutoPositionOffset, y );
+	m_nAutoPositionOffset = 0;
+}
+
 void CHudItemEffectMeter::PerformLayout()
 {
-	m_VRSafeArea.Restore( this );
+	// VGUI may lay out more than once without reloading the resource. Apply
+	// the normal multi-meter spacing once, rather than drifting on every pass.
+	RestoreAutoPosition();
 	BaseClass::PerformLayout();
 
 	// update icon
@@ -450,7 +463,9 @@ void CHudItemEffectMeter::PerformLayout()
 		{
 			int xPos = 0, yPos = 0;
 			GetPos( xPos, yPos );
-			SetPos( xPos - m_iXOffset, yPos );
+			m_nAutoPositionX = xPos - m_iXOffset;
+			m_nAutoPositionOffset = m_nAutoPositionX - xPos;
+			SetPos( m_nAutoPositionX, yPos );
 		}
 	}
 }
@@ -460,7 +475,6 @@ void CHudItemEffectMeter::PerformLayout()
 //-----------------------------------------------------------------------------
 bool CHudItemEffectMeter::ShouldDraw( void )
 {
-	m_VRSafeArea.Apply( this, false );
 	bool bShouldDraw = true;
 
 	C_TFPlayer *pPlayer = C_TFPlayer::GetLocalTFPlayer();

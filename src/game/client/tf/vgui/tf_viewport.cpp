@@ -61,6 +61,11 @@
 #endif
 #include "clientmode_tf.h"
 #include "ienginevgui.h"
+#include "sourcevr/isourcevirtualreality.h"
+#include "vgui_controls/PanelScreenSizeScope.h"
+#include "vgui_controls/BuildGroup.h"
+#include "hud_crosshair.h"
+#include "tf_hud_target_id.h"
 #include "tf_hud_mainmenuoverride.h"
 #include "c_tf_objective_resource.h"
 
@@ -233,8 +238,193 @@ CON_COMMAND( togglescores, "Toggles score panel")
 	}
 }
 
+// The HUD has a real 4:3 parent, while viewport dialogs and GameUI remain
+// parented to the original widescreen viewport. Resource alignment, Think,
+// scheme reloads, and painting all see the same logical HUD dimensions.
+static vgui::PHandle s_VRHudCanvas;
+static vgui::PHandle s_VRHudViewport;
+struct VRHudParent_t
+{
+	vgui::PHandle panel;
+	vgui::PHandle parent;
+};
+static CUtlVector<VRHudParent_t> s_VRHudParents;
+
+struct VRHudVisibility_t
+{
+	vgui::PHandle panel;
+	bool visible;
+};
+
+static void SaveVRHudVisibility( vgui::Panel *panel, CUtlVector<VRHudVisibility_t> &saved )
+{
+	VRHudVisibility_t state;
+	state.panel = panel;
+	// Save the stored flag, not a derived panel's transient draw eligibility.
+	// Escort IsVisible() returns false until point positions arrive; restoring
+	// that as SetVisible(false) prevents its OnTick initialization from running.
+	// The raw flag still preserves deliberately hidden event-driven panels.
+	state.visible = panel->vgui::Panel::IsVisible();
+	saved.AddToTail( state );
+	for ( int i = 0; i < panel->GetChildCount(); ++i )
+	{
+		vgui::Panel *child = panel->GetChild( i );
+		if ( child )
+			SaveVRHudVisibility( child, saved );
+	}
+}
+
+// Reflow only affected HUD roots. A layout change must not create controls,
+// reveal event-driven panels, reset gameplay state, or touch menu resources.
+static void ReloadVRHudLayout( vgui::Panel *viewport, const CUtlVector<vgui::PHandle> &panels )
+{
+	if ( panels.Count() == 0 )
+		return;
+	KeyValuesAD layout( "HudLayout" );
+	const bool loaded = layout->LoadFromFile( filesystem, "scripts/HudLayout.res", "GAME" );
+	KeyValuesAD conditions( "conditions" );
+	g_pClientMode->ComputeVguiResConditions( conditions );
+	static_cast<CBaseViewport *>( viewport )->GetBuildGroup()->ProcessConditionalKeys( layout, conditions );
+
+	FOR_EACH_VEC( panels, i )
+	{
+		vgui::Panel *panel = panels[i].Get();
+		if ( !panel )
+			continue;
+		CUtlVector<VRHudVisibility_t> saved;
+		SaveVRHudVisibility( panel, saved );
+		vgui::PanelScreenSizeScope screenSize( panel );
+		KeyValues *settings = loaded ? layout->FindKey( panel->GetName() ) : NULL;
+		if ( settings )
+			panel->ApplySettings( settings );
+		// Match normal viewport setup: generic positions FIRST, then each
+		// panel's specialized resource (Frontier Justice, ball, cleaver, etc.).
+		panel->InvalidateLayout( true, true );
+		FOR_EACH_VEC( saved, j )
+		{
+			if ( saved[j].panel.Get() )
+				saved[j].panel->SetVisible( saved[j].visible );
+		}
+	}
+}
+
+static bool VRHudScreenSize( vgui::Panel *panel, int &width, int &height )
+{
+	if ( !UseVR() || !s_VRHudCanvas.Get() || !s_VRHudViewport.Get() )
+		return false;
+	s_VRHudViewport->GetSize( width, height );
+	for ( vgui::Panel *ancestor = panel; ancestor; ancestor = ancestor->GetParent() )
+	{
+		if ( ancestor == s_VRHudCanvas.Get() )
+		{
+			s_VRHudCanvas->GetSize( width, height );
+			break;
+		}
+	}
+	return true;
+}
+
+void UpdateTFVRHudLayout()
+{
+	vgui::Panel *viewport = g_pClientMode->GetViewport();
+	const bool active = UseVR() && viewport && engine->IsInGame();
+	if ( !active || s_VRHudViewport.Get() != viewport )
+	{
+		vgui::PHandle previousViewport = s_VRHudViewport;
+		CUtlVector<vgui::PHandle> restored;
+		FOR_EACH_VEC( s_VRHudParents, i )
+		{
+			vgui::Panel *panel = s_VRHudParents[i].panel.Get();
+			if ( panel && panel->GetParent() == s_VRHudCanvas.Get() && s_VRHudParents[i].parent.Get() )
+			{
+				panel->SetParent( s_VRHudParents[i].parent.Get() );
+				restored[restored.AddToTail()] = panel;
+			}
+		}
+		s_VRHudParents.RemoveAll();
+		if ( s_VRHudCanvas.Get() )
+			s_VRHudCanvas->MarkForDeletion();
+		s_VRHudCanvas = NULL;
+		s_VRHudViewport = NULL;
+		if ( previousViewport.Get() )
+		{
+			ReloadVRHudLayout( previousViewport.Get(), restored );
+		}
+		if ( !active )
+			return;
+	}
+
+	int width, height;
+	viewport->GetSize( width, height );
+	if ( width <= 0 || height <= 0 )
+		return;
+	C_BasePlayer *player = C_BasePlayer::GetLocalPlayer();
+	const bool spectator = player && player->IsObserver();
+	const int hudWidth = spectator ? width : Min( width, height * 4 / 3 );
+	if ( !s_VRHudCanvas.Get() )
+	{
+		s_VRHudViewport = viewport;
+		// Plain Panel deliberately retains the children's existing HUD build
+		// group, so HudLayout.res and animation scripts still find them.
+		s_VRHudCanvas = new vgui::Panel( viewport, "VRGameplayHUD" );
+		s_VRHudCanvas->SetPaintBackgroundEnabled( false );
+		s_VRHudCanvas->SetPaintEnabled( false );
+		s_VRHudCanvas->SetMouseInputEnabled( false );
+		s_VRHudCanvas->SetKeyBoardInputEnabled( false );
+	}
+	const bool resized = s_VRHudCanvas->GetWide() != hudWidth || s_VRHudCanvas->GetTall() != height;
+	s_VRHudCanvas->SetBounds( ( width - hudWidth ) / 2, 0, hudWidth, height );
+
+	CUtlVector<vgui::PHandle> changedPanels;
+	for ( int i = s_VRHudParents.Count() - 1; i >= 0; --i )
+	{
+		if ( !s_VRHudParents[i].panel.Get() )
+			s_VRHudParents.FastRemove( i );
+	}
+	gHUD.ForEachHudElement( [&]( CHudElement *element )
+	{
+		vgui::Panel *panel = dynamic_cast<vgui::Panel *>( element );
+		// Aim-projected indicators keep their original full-canvas coordinates.
+		// This changes neither the aim ray nor its projection/recenter limits.
+		if ( !panel || dynamic_cast<CHudCrosshair *>( element ) || dynamic_cast<CTargetID *>( element ) ||
+			dynamic_cast<IViewPortPanel *>( panel ) || panel->IsPopup() )
+			return;
+		vgui::Panel *parent = panel->GetParent();
+		if ( parent != viewport )
+			return; // Nested HUD children already inherit their parent's canvas.
+		VRHudParent_t original;
+		original.panel = panel;
+		original.parent = parent;
+		s_VRHudParents.AddToTail( original );
+		panel->SetParent( s_VRHudCanvas.Get() );
+		changedPanels[changedPanels.AddToTail()] = panel;
+	} );
+	if ( resized )
+	{
+		// Includes observer entry and respawn. Shared objective panels inherit
+		// the new canvas instead of retaining their previous 4:3 coordinates.
+		changedPanels.RemoveAll();
+		for ( int i = 0; i < s_VRHudCanvas->GetChildCount(); ++i )
+			changedPanels[changedPanels.AddToTail()] = s_VRHudCanvas->GetChild( i );
+	}
+	ReloadVRHudLayout( viewport, changedPanels );
+}
+
+CON_COMMAND( vr_hud_layout_status, "Print the VR HUD and menu logical canvas sizes." )
+{
+	if ( !UseVR() || !s_VRHudCanvas.Get() || !s_VRHudViewport.Get() )
+	{
+		Msg( "VR gameplay HUD canvas is inactive.\n" );
+		return;
+	}
+	Msg( "VR HUD: %dx%d; menus: %dx%d; aim projection: unchanged; HUD roots: %d\n",
+		s_VRHudCanvas->GetWide(), s_VRHudCanvas->GetTall(),
+		s_VRHudViewport->GetWide(), s_VRHudViewport->GetTall(), s_VRHudParents.Count() );
+}
+
 TFViewport::TFViewport()
 {
+	vgui::SetPanelScreenSizeProvider( VRHudScreenSize );
 	ivgui()->AddTickSignal( GetVPanel(), 0 );
 }
 

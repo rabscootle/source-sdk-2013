@@ -134,6 +134,7 @@ private:
 	VMatrix m_MideyePose;
 	int m_nLastTrackingFrame;
 	CTextureReference m_EyeTexture[2];
+	CTextureReference m_GlowTexture;
 	CUtlVector<uint8> m_Readback;
 	ID3D11Device *m_pD3D11Device;
 	ID3D11DeviceContext *m_pD3D11Context;
@@ -372,6 +373,13 @@ void CTFOpenVR::CreateRenderTargets( IMaterialSystem *materialSystem )
 		}
 	}
 	m_Readback.SetCount( m_nRenderWidth * m_nRenderHeight * 4 );
+	// Eye-sized scratch color for outlines. The desktop FullFrameFB may be
+	// much smaller than an eye (or have an entirely different aspect ratio).
+	// Each eye renders and consumes this scratch target before the next eye.
+	m_GlowTexture.Init( materialSystem->CreateNamedRenderTargetTextureEx2(
+		"_rt_OpenVRGlow", m_nRenderWidth, m_nRenderHeight, RT_SIZE_NO_CHANGE,
+		IMAGE_FORMAT_BGRA8888, MATERIAL_RT_DEPTH_NONE,
+		TEXTUREFLAGS_CLAMPS | TEXTUREFLAGS_CLAMPT | TEXTUREFLAGS_NOMIP, 0 ) );
 	OpenVRTrace( m_EyeTexture[VREye_Left].IsValid() && m_EyeTexture[VREye_Right].IsValid()
 		? "RenderTargets: both eye textures created"
 		: "RenderTargets: eye texture creation failed" );
@@ -379,6 +387,7 @@ void CTFOpenVR::CreateRenderTargets( IMaterialSystem *materialSystem )
 
 void CTFOpenVR::ShutdownRenderTargets()
 {
+	m_GlowTexture.Shutdown();
 	m_EyeTexture[VREye_Left].Shutdown();
 	m_EyeTexture[VREye_Right].Shutdown();
 	m_Readback.Purge();

@@ -26,6 +26,7 @@
 #include <vgui/MouseCode.h>
 
 #include <vgui_controls/Panel.h>
+#include <vgui_controls/PanelScreenSizeScope.h>
 #include <vgui_controls/BuildGroup.h>
 #include <vgui_controls/Tooltip.h>
 #include <vgui_controls/PHandle.h>
@@ -48,6 +49,28 @@
 #include <tier0/memdbgon.h>
 
 using namespace vgui;
+
+static PanelScreenSizeProvider s_pPanelScreenSizeProvider = NULL;
+void vgui::SetPanelScreenSizeProvider( PanelScreenSizeProvider provider )
+{
+	s_pPanelScreenSizeProvider = provider;
+}
+vgui::PanelScreenSizeScope::PanelScreenSizeScope( Panel *panel ) : m_bChanged( false )
+{
+	int width, height;
+	if ( !s_pPanelScreenSizeProvider || !s_pPanelScreenSizeProvider( panel, width, height ) )
+		return;
+	surface()->GetScreenSize( m_nWidth, m_nHeight );
+	m_bWasOverridden = surface()->IsScreenSizeOverrideActive();
+	m_bChanged = !m_bWasOverridden || width != m_nWidth || height != m_nHeight;
+	if ( m_bChanged )
+		surface()->ForceScreenSizeOverride( true, width, height );
+}
+vgui::PanelScreenSizeScope::~PanelScreenSizeScope()
+{
+	if ( m_bChanged )
+		surface()->ForceScreenSizeOverride( m_bWasOverridden, m_nWidth, m_nHeight );
+}
 
 #define TRIPLE_PRESS_MSEC	300
 
@@ -1095,6 +1118,7 @@ void Panel::Repaint()
 //-----------------------------------------------------------------------------
 void Panel::Think()
 {
+	PanelScreenSizeScope screenSize( this );
 	if (IsVisible())
 	{	
 		// update any tooltips
@@ -1127,6 +1151,7 @@ void Panel::OnChildSettingsApplied( KeyValues *pInResourceData, Panel *pChild  )
 //-----------------------------------------------------------------------------
 void Panel::PaintTraverse( bool repaint, bool allowForce )
 {
+	PanelScreenSizeScope screenSize( this );
 	if ( m_bWorldPositionCurrentFrame )
 	{
 		surface()->SolveTraverse( GetVPanel() );
@@ -3886,6 +3911,7 @@ Color Panel::GetFgColor()
 
 void Panel::InternalPerformLayout()
 {
+	PanelScreenSizeScope screenSize( this );
 	// Don't layout if we're still waiting for our scheme to be applied.
 	// At worst, it leads to crashes, at best it does work that we'll redo as soon as the scheme has been applied.
 	if ( _flags.IsFlagSet( NEEDS_SCHEME_UPDATE ) )
@@ -4176,6 +4202,7 @@ void Panel::ApplySchemeSettings(IScheme *pScheme)
 //-----------------------------------------------------------------------------
 void Panel::PerformApplySchemeSettings()
 {
+	PanelScreenSizeScope screenSize( this );
 	if ( _flags.IsFlagSet( NEEDS_DEFAULT_SETTINGS_APPLIED ) )
 	{
 		InternalInitDefaultValues( GetAnimMap() );
@@ -4339,6 +4366,7 @@ Panel::PinCorner_e GetPinCornerFromString( const char* pszCornerName )
 //-----------------------------------------------------------------------------
 void Panel::ApplySettings(KeyValues *inResourceData)
 {
+	PanelScreenSizeScope screenSize( this );
 	tmZone( TELEMETRY_LEVEL0, TMZF_NONE, "%s - %s", __FUNCTION__, GetName() );
 
 	// First restore to default values
@@ -5012,6 +5040,7 @@ void PreparePanelMessageMap(PanelMessageMap *panelMap)
 //-----------------------------------------------------------------------------
 void Panel::OnMessage(const KeyValues *params, VPANEL ifromPanel)
 {
+	PanelScreenSizeScope screenSize( this );
 	PanelMessageMap *panelMap = GetMessageMap();
 	bool bFound = false;
 	int iMessageName = params->GetNameSymbol();
