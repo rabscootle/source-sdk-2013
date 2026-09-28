@@ -1413,6 +1413,10 @@ void CControlPointProgressBar::PerformLayout( void )
 	{
 		int iIconX, iIconY;
 		ipanel()->GetAbsPos(m_pAttachedToIcon->GetVPanel(), iIconX, iIconY );
+		// SetPos below is relative to our parent, not the screen. In VR the
+		// gameplay HUD lives in a centered canvas with a nonzero origin.
+		if ( GetParent() )
+			GetParent()->ScreenToLocal( iIconX, iIconY );
 		int iDir = m_pAttachedToIcon->GetCapProgressDir();
 		int iXPos = 0;
 		int iYPos = 0;

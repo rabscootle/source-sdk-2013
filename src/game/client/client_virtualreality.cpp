@@ -409,6 +409,11 @@ void CClientVirtualReality::UpdateMenuViewport()
 	{
 		// Set this before VGUI layout/painting, never midway through a capture.
 		g_pMatSystemSurface->ForceScreenSizeOverride( true, width, height );
+		// Updating the override alone leaves GameUI's cached scheme/layout at
+		// the activation resolution. Notify VGUI only on actual size changes.
+		vgui::surface()->OnScreenSizeChanged( previousWidth, previousHeight );
+		vgui::VPANEL gameUIRoot = enginevgui->GetPanel( PANEL_GAMEUIDLL );
+		if ( gameUIRoot ) vgui::ipanel()->SetSize( gameUIRoot, width, height );
 		vgui::VPANEL root = enginevgui->GetPanel( PANEL_CLIENTDLL );
 		if ( root ) vgui::ipanel()->SetSize( root, width, height );
 		root = enginevgui->GetPanel( PANEL_CLIENTDLL_TOOLS );

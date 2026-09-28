@@ -204,6 +204,7 @@ void CHudTFCrosshair::Paint()
 #endif
 	float flWidth = flWeaponScale * flPlayerScale * (float)iTextureW;
 	float flHeight = flWeaponScale * flPlayerScale * (float)iTextureH;
+	ScaleVRDrawSize( flWidth, flHeight );
 	int iWidth = (int)( flWidth + 0.5f );
 	int iHeight = (int)( flHeight + 0.5f );
 	int iX = (int)( x + 0.5f );

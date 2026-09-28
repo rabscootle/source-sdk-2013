@@ -236,6 +236,24 @@ void CHudCrosshair::GetDrawPosition ( float *pX, float *pY, bool *pbBehindCamera
 }
 
 
+void CHudCrosshair::ScaleVRDrawSize( float &width, float &height )
+{
+#ifdef TF_CLIENT_DLL
+	if ( UseVR() && g_ClientVirtualReality.ShouldRenderHUDInWorld() )
+	{
+		// Preserve the crosshair's size on the HUD quad as its texture resolution
+		// changes. This affects only drawing, never aim coordinates or input.
+		int screenWidth, screenHeight;
+		vgui::surface()->GetScreenSize( screenWidth, screenHeight );
+		if ( screenWidth > 0 && screenHeight > 0 )
+		{
+			width *= screenWidth / 1280.0f;
+			height *= screenHeight / 720.0f;
+		}
+	}
+#endif
+}
+
 void CHudCrosshair::Paint( void )
 {
 	if ( !m_pCrosshair )
@@ -273,6 +291,7 @@ void CHudCrosshair::Paint( void )
 #endif
 	float flWidth = flWeaponScale * flPlayerScale * (float)iTextureW;
 	float flHeight = flWeaponScale * flPlayerScale * (float)iTextureH;
+	ScaleVRDrawSize( flWidth, flHeight );
 	int iWidth = (int)( flWidth + 0.5f );
 	int iHeight = (int)( flHeight + 0.5f );
 	int iX = (int)( x + 0.5f );

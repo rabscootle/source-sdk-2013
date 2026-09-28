@@ -914,4 +914,3 @@ void CBaseModelPanel::PostPaint3D( IMatRenderContext *pRenderContext )
 	pRenderContext->MatrixMode( MATERIAL_MODEL );
 	pRenderContext->PopMatrix();
 }
-

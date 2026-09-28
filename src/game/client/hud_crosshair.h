@@ -39,6 +39,7 @@ public:
 	// any UI element that wants to be at the aim point can use this to figure out where to draw
 	static void	GetDrawPosition ( float *pX, float *pY, bool *pbBehindCamera, QAngle angleCrosshairOffset = vec3_angle );
 protected:
+	static void ScaleVRDrawSize( float &width, float &height );
 	virtual void	ApplySchemeSettings( vgui::IScheme *scheme );
 	virtual void	Paint();
 	
