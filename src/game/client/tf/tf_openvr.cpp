@@ -18,20 +18,21 @@
 #include <dxgi.h>
 #include <openvr.h>
 
-extern ConVar openvr_profile_menu;
+extern ConVar vr_profile_menu;
 
 namespace
 {
 
 const float kSourceUnitsPerMeter = 39.3700787f;
 const int kGPUBridgeBufferCount = 3;
-ConVar openvr_render_scale( "openvr_render_scale", "0.5", FCVAR_ARCHIVE,
+ConVar vr_render_scale( "vr_render_scale", "1.0", FCVAR_ARCHIVE,
 	"Per-eye dimension multiplier relative to SteamVR recommendation (0.25-2). Re-activate VR after changing.",
 	true, 0.25f, true, 2.0f );
-ConVar openvr_copy_interval( "openvr_copy_interval", "1", FCVAR_ARCHIVE,
-	"Copy D3D9 eye pixels every N submitted frames while using the temporary CPU bridge." );
-ConVar openvr_gpu_bridge( "openvr_gpu_bridge", "0", FCVAR_ARCHIVE,
-	"Experimental D3D9Ex shared-texture bridge. Disabled by default until cross-API synchronization is reliable." );
+ConVar vr_copy_interval( "vr_copy_interval", "1", FCVAR_ARCHIVE,
+	"Copy eye pixels every N submitted frames on the CPU fallback only; GPU submission always copies every frame.",
+	true, 1.0f, true, 8.0f );
+ConVar vr_gpu_bridge( "vr_gpu_bridge", "1", FCVAR_ARCHIVE,
+	"Use GPU-shared D3D9Ex submission, with CPU fallback if unavailable. Re-activate VR after changing." );
 
 void OpenVRTrace( const char *message )
 {
@@ -257,7 +258,7 @@ bool CTFOpenVR::SampleTrackingState( float playerGameFov, float predictionSecond
 		return true;
 
 	vr::TrackedDevicePose_t poses[vr::k_unMaxTrackedDeviceCount];
-	const bool profiling = openvr_profile_menu.GetBool();
+	const bool profiling = vr_profile_menu.GetBool();
 	const double waitStart = profiling ? Plat_FloatTime() : 0;
 	const vr::EVRCompositorError error = vr::VRCompositor()->WaitGetPoses( poses, ARRAYSIZE( poses ), NULL, 0 );
 	static int samples = 0, duplicates = 0, previousFrame = -1;
@@ -367,7 +368,7 @@ void CTFOpenVR::CreateRenderTargets( IMaterialSystem *materialSystem )
 		OpenVRTrace( message );
 		if ( !texture || texture->IsError() || width != (int)m_nRenderWidth || height != (int)m_nRenderHeight )
 		{
-			Warning( "OpenVR eye target allocation failed or size mismatched. Lower openvr_render_scale and reactivate VR.\n" );
+			Warning( "OpenVR eye target allocation failed or size mismatched. Lower vr_render_scale and reactivate VR.\n" );
 			ShutdownRenderTargets();
 			return;
 		}
@@ -427,12 +428,12 @@ bool CTFOpenVR::Activate()
 
 	OpenVRTrace( "Activate: compositor available" );
 	m_pVRSystem->GetRecommendedRenderTargetSize( &m_nRenderWidth, &m_nRenderHeight );
-	const float renderScale = clamp( openvr_render_scale.GetFloat(), 0.25f, 2.0f );
+	const float renderScale = clamp( vr_render_scale.GetFloat(), 0.25f, 2.0f );
 	// Bound resource sizes before float-to-integer conversion and allocation.
 	if ( !m_nRenderWidth || !m_nRenderHeight ||
 		m_nRenderWidth * renderScale > 8192.0f || m_nRenderHeight * renderScale > 8192.0f )
 	{
-		Warning( "OpenVR requested eye size exceeds the bridge's 8192-pixel dimension limit. Lower openvr_render_scale.\n" );
+		Warning( "OpenVR requested eye size exceeds the bridge's 8192-pixel dimension limit. Lower vr_render_scale.\n" );
 		vr::VR_Shutdown();
 		m_pVRSystem = NULL;
 		return false;
@@ -503,14 +504,14 @@ bool CTFOpenVR::CreateD3D11Resources()
 	if ( FAILED( createResult ) )
 		return false;
 
-	if ( openvr_gpu_bridge.GetBool() && CreateGPUBridgeResources() )
+	if ( vr_gpu_bridge.GetBool() && CreateGPUBridgeResources() )
 	{
 		m_bGPUBridge = true;
 		Msg( "OpenVR using GPU-shared D3D9Ex submission bridge.\n" );
 		OpenVRTrace( "Bridge: GPU sharing enabled" );
 		return true;
 	}
-	if ( openvr_gpu_bridge.GetBool() )
+	if ( vr_gpu_bridge.GetBool() )
 	{
 		Warning( "OpenVR GPU sharing unavailable; using the slower CPU submission bridge.\n" );
 		OpenVRTrace( "Bridge: GPU sharing unavailable, using CPU fallback" );
@@ -697,7 +698,7 @@ bool CTFOpenVR::SubmitEye( VREye eye )
 		return false;
 	}
 
-	const int copyInterval = clamp( openvr_copy_interval.GetInt(), 1, 8 );
+	const int copyInterval = clamp( vr_copy_interval.GetInt(), 1, 8 );
 	const bool copyThisFrame = !m_bSubmitTextureInitialized[eye] || ( gpGlobals->framecount % copyInterval ) == 0;
 	ID3D11Texture2D *submitTexture = m_bGPUBridge ? m_pLastReadyTexture11[eye] : m_pSubmitTexture[eye];
 	if ( copyThisFrame )

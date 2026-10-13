@@ -64,6 +64,7 @@
 #include "sourcevr/isourcevirtualreality.h"
 #include "vgui_controls/PanelScreenSizeScope.h"
 #include "vgui_controls/BuildGroup.h"
+#include "materialsystem/imaterialsystem.h"
 #include "hud_crosshair.h"
 #include "tf_hud_target_id.h"
 #include "tf_hud_mainmenuoverride.h"
@@ -312,7 +313,12 @@ static bool VRHudScreenSize( vgui::Panel *panel, int &width, int &height )
 {
 	if ( !UseVR() || !s_VRHudCanvas.Get() || !s_VRHudViewport.Get() )
 		return false;
-	s_VRHudViewport->GetSize( width, height );
+	// Do not use the viewport's cached bounds here: OnScreenSizeChanged asks
+	// this provider for the NEW size while those bounds still contain the old
+	// resolution. Feeding them back prevents the viewport from ever resizing.
+	materials->GetBackBufferDimensions( width, height );
+	if ( width <= 0 || height <= 0 )
+		return false;
 	for ( vgui::Panel *ancestor = panel; ancestor; ancestor = ancestor->GetParent() )
 	{
 		if ( ancestor == s_VRHudCanvas.Get() )
@@ -355,9 +361,13 @@ void UpdateTFVRHudLayout()
 	}
 
 	int width, height;
-	viewport->GetSize( width, height );
+	// Resolve the full canvas independently of deferred VGUI resize messages.
+	// Menus and aim-projected panels retain this full-resolution coordinate space.
+	materials->GetBackBufferDimensions( width, height );
 	if ( width <= 0 || height <= 0 )
 		return;
+	if ( viewport->GetWide() != width || viewport->GetTall() != height )
+		viewport->SetSize( width, height );
 	C_BasePlayer *player = C_BasePlayer::GetLocalPlayer();
 	const bool spectator = player && player->IsObserver();
 	const int hudWidth = spectator ? width : Min( width, height * 4 / 3 );

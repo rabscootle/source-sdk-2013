@@ -39,8 +39,9 @@ ConVar vr_activate_default( "vr_activate_default",		"0", FCVAR_ARCHIVE, "If this
 
 ConVar vr_moveaim_mode      ( "vr_moveaim_mode",      "3", FCVAR_ARCHIVE, "0=move+shoot from face. 1=move with torso. 2,3,4=shoot with face+mouse cursor. 5+ are probably not that useful." );
 ConVar vr_moveaim_mode_zoom ( "vr_moveaim_mode_zoom", "3", FCVAR_ARCHIVE, "0=move+shoot from face. 1=move with torso. 2,3,4=shoot with face+mouse cursor. 5+ are probably not that useful." );
-ConVar vr_mouse_recenter_offscreen( "vr_mouse_recenter_offscreen", "1", 0,
-	"Experimental: looking away from an off-HUD aim point enables head-follow aiming until mouse/joystick aim input resumes." );
+ConVar vr_aim_recenter_enable( "vr_aim_recenter_enable", "1", FCVAR_ARCHIVE,
+	"In vr_moveaim_mode 3, recenter off-HUD aim onto the head view until deliberate mouse/joystick input resumes.",
+	true, 0.0f, true, 1.0f );
 ConVar vr_mouse_recenter_vertical_margin( "vr_mouse_recenter_vertical_margin", "1.25", FCVAR_ARCHIVE,
 	"Vertical head-follow trigger relative to HUD half-height: 1 is the edge, 1.25 allows 25 percent extra above/below.",
 	true, 1.0f, true, 3.0f );
@@ -97,9 +98,9 @@ ConVar vr_viewmodel_offset_forward( "vr_viewmodel_offset_forward", "-8", 0 );
 ConVar vr_viewmodel_offset_forward_large( "vr_viewmodel_offset_forward_large", "-15", 0 );
 
 ConVar vr_force_windowed ( "vr_force_windowed", "0", FCVAR_ARCHIVE );
-ConVar openvr_profile_menu( "openvr_profile_menu", "0", 0, "Log aggregate CPU wall times for VR menu and pose waits; disable after testing." );
+ConVar vr_profile_menu( "vr_profile_menu", "0", 0, "Log aggregate CPU wall times for VR menu and pose waits; disable after testing." );
 
-static ConVar openvr_dump_ui( "openvr_dump_ui", "0", 0, "Set to 1 (before model) or 2 (after model) to save UI and left-eye RGB captures." );
+static ConVar vr_dump_ui( "vr_dump_ui", "0", 0, "Set to 1 (before model) or 2 (after model) to save UI and left-eye RGB captures." );
 
 static void DumpOpenVRTarget( IMatRenderContext *context, ITexture *texture, const char *stage, int capture )
 {
@@ -427,7 +428,7 @@ void CClientVirtualReality::UpdateMenuViewport()
 
 void CClientVirtualReality::DrawMainMenu()
 {
-	const bool profiling = openvr_profile_menu.GetBool();
+	const bool profiling = vr_profile_menu.GetBool();
 	const double profileStart = profiling ? Plat_FloatTime() : 0;
 	double profileSubmit = 0;
 	// have to draw the UI in stereo via the render texture or it won't fuse properly
@@ -538,10 +539,10 @@ void CClientVirtualReality::DrawMainMenu()
 		pRenderContext->Flush();
 	}
 
-	const int dumpCapture = clamp( openvr_dump_ui.GetInt(), 0, 2 );
+	const int dumpCapture = clamp( vr_dump_ui.GetInt(), 0, 2 );
 	if ( dumpCapture )
 	{
-		openvr_dump_ui.SetValue( 0 );
+		vr_dump_ui.SetValue( 0 );
 		DumpOpenVRTarget( pRenderContext, pTexture, "capture", dumpCapture );
 	}
 	int leftX, leftY, leftW, leftH, rightX, rightY, rightW, rightH;
@@ -1001,11 +1002,9 @@ bool CClientVirtualReality::OverridePlayerMotion( float flInputSampleFrametime, 
 	const bool viewMoved = fabsf( AngleDiff( m_PlayerViewAngle[YAW], m_LastAimFollowViewAngle[YAW] ) ) > 0.001f ||
 		fabsf( AngleDiff( m_PlayerViewAngle[PITCH], m_LastAimFollowViewAngle[PITCH] ) ) > 0.001f;
 	m_LastAimFollowViewAngle = m_PlayerViewAngle;
-	if ( vr_mouse_recenter_offscreen.GetBool() && !enginevgui->IsGameUIVisible() &&
+	if ( vr_aim_recenter_enable.GetBool() && !enginevgui->IsGameUIVisible() &&
 		!g_pMatSystemSurface->IsCursorVisible() && !CurrentlyZoomed() &&
-		( m_hmmMovementActual == HMM_SHOOTMOVEMOUSE_LOOKFACE ||
-		  m_hmmMovementActual == HMM_SHOOTBOUNDEDMOUSE_LOOKFACE_MOVEFACE ||
-		  m_hmmMovementActual == HMM_SHOOTBOUNDEDMOUSE_LOOKFACE_MOVEMOUSE ) )
+		m_hmmMovementActual == HMM_SHOOTBOUNDEDMOUSE_LOOKFACE_MOVEFACE ) // Mode 3 only.
 	{
 		if ( mouseMoved )
 		{
