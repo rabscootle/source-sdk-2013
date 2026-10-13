@@ -37,6 +37,7 @@
 // Client specific.
 #ifdef CLIENT_DLL
 #include "c_baseviewmodel.h"
+#include "sourcevr/isourcevirtualreality.h"
 #include "c_tf_player.h"
 #include "c_te_effect_dispatch.h"
 #include "c_tf_fx.h"
@@ -3316,9 +3317,28 @@ void CTFPlayerShared::CheckDisguiseTimer( void )
 //-----------------------------------------------------------------------------
 // Purpose: 
 //-----------------------------------------------------------------------------
+#ifdef CLIENT_DLL
+static void RefreshVRScopedWeaponVisibility( C_TFPlayer *player )
+{
+	if ( !UseVR() || player != C_TFPlayer::GetLocalTFPlayer() )
+		return;
+	// Render-list membership caches ShouldDraw(). Refresh on both transitions
+	// rather than waiting for the next weapon animation/network update.
+	if ( player->GetActiveWeapon() )
+		player->GetActiveWeapon()->UpdateVisibility();
+	for ( int i = 0; i < MAX_VIEWMODELS; ++i )
+	{
+		C_BaseViewModel *viewModel = player->GetViewModel( i );
+		if ( viewModel )
+			viewModel->UpdateVisibility();
+	}
+}
+#endif
+
 void CTFPlayerShared::OnAddZoomed( void )
 {
 #ifdef CLIENT_DLL
+	RefreshVRScopedWeaponVisibility( m_pOuter );
 	// hide cosmetic while zoom in thirdperson
 	if ( m_pOuter == C_TFPlayer::GetLocalTFPlayer() && ::input->CAM_IsThirdPerson() )
 	{
@@ -3337,6 +3357,7 @@ void CTFPlayerShared::OnRemoveZoomed( void )
 #endif // GAME_DLL
 
 #ifdef CLIENT_DLL
+	RefreshVRScopedWeaponVisibility( m_pOuter );
 	// unhide cosmetic after zoom in thirdperson
 	if ( m_pOuter == C_TFPlayer::GetLocalTFPlayer() && ::input->CAM_IsThirdPerson() )
 	{

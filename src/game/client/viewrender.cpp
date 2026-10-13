@@ -2455,7 +2455,7 @@ void CViewRender::RenderView( const CViewSetup &viewRender, int nClearFlags, int
 				// TODO - a bit of a shonky test - basically trying to catch the main menu, the briefing screen, the loadout screen, etc.
 				// Cursor visibility does not make a transparent HUD texture opaque.
 				// Keep the world visible through unpainted pixels in menus too.
-				g_ClientVirtualReality.RenderHUDQuad( false, true );
+				g_ClientVirtualReality.RenderHUDQuad( g_ClientVirtualReality.CurrentlyZoomed(), true );
 				CleanupMain3DView( viewRender );
 			}
 		}

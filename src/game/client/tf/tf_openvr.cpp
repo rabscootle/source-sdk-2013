@@ -18,11 +18,8 @@
 #include <dxgi.h>
 #include <openvr.h>
 
-extern ConVar vr_profile_menu;
-
 namespace
 {
-
 const float kSourceUnitsPerMeter = 39.3700787f;
 const int kGPUBridgeBufferCount = 3;
 ConVar vr_render_scale( "vr_render_scale", "1.0", FCVAR_ARCHIVE,
@@ -33,17 +30,6 @@ ConVar vr_copy_interval( "vr_copy_interval", "1", FCVAR_ARCHIVE,
 	true, 1.0f, true, 8.0f );
 ConVar vr_gpu_bridge( "vr_gpu_bridge", "1", FCVAR_ARCHIVE,
 	"Use GPU-shared D3D9Ex submission, with CPU fallback if unavailable. Re-activate VR after changing." );
-
-void OpenVRTrace( const char *message )
-{
-	FILE *file = fopen( "openvr_trace.log", "a" );
-	if ( !file )
-		return;
-
-	fprintf( file, "%s\n", message );
-	fflush( file );
-	fclose( file );
-}
 
 VMatrix OpenVRMatrixToSource( const vr::HmdMatrix34_t &matrix )
 {
@@ -258,26 +244,7 @@ bool CTFOpenVR::SampleTrackingState( float playerGameFov, float predictionSecond
 		return true;
 
 	vr::TrackedDevicePose_t poses[vr::k_unMaxTrackedDeviceCount];
-	const bool profiling = vr_profile_menu.GetBool();
-	const double waitStart = profiling ? Plat_FloatTime() : 0;
 	const vr::EVRCompositorError error = vr::VRCompositor()->WaitGetPoses( poses, ARRAYSIZE( poses ), NULL, 0 );
-	static int samples = 0, duplicates = 0, previousFrame = -1;
-	static double waitTotal = 0;
-	if ( profiling )
-	{
-		waitTotal += Plat_FloatTime() - waitStart;
-		if ( previousFrame == gpGlobals->framecount ) ++duplicates;
-		previousFrame = gpGlobals->framecount;
-		if ( ++samples == 120 )
-		{
-			char message[192];
-			Q_snprintf( message, sizeof( message ), "Pose CPU ms avg/120: wait=%.3f repeated_same_frame=%d in_level=%d gpu=%d",
-				waitTotal * 1000 / samples, duplicates, engine->IsInGame(), m_bGPUBridge );
-			OpenVRTrace( message );
-			samples = duplicates = 0; waitTotal = 0;
-		}
-	}
-	else { samples = duplicates = 0; previousFrame = -1; waitTotal = 0; }
 	if ( error != vr::VRCompositorError_None )
 		return false;
 
@@ -340,11 +307,9 @@ bool CTFOpenVR::WillDriftInYaw()
 
 void CTFOpenVR::CreateRenderTargets( IMaterialSystem *materialSystem )
 {
-	OpenVRTrace( "RenderTargets: callback entered" );
 	ShutdownRenderTargets();
 	if ( !m_bActive || !materialSystem || !m_nRenderWidth || !m_nRenderHeight )
 	{
-		OpenVRTrace( "RenderTargets: skipped because backend is not ready" );
 		return;
 	}
 
@@ -362,10 +327,6 @@ void CTFOpenVR::CreateRenderTargets( IMaterialSystem *materialSystem )
 		ITexture *texture = m_EyeTexture[eye];
 		const int width = texture ? texture->GetActualWidth() : 0;
 		const int height = texture ? texture->GetActualHeight() : 0;
-		char message[192];
-		Q_snprintf( message, sizeof( message ), "Eye allocation: eye=%d requested=%ux%u actual=%dx%d",
-			eye, m_nRenderWidth, m_nRenderHeight, width, height );
-		OpenVRTrace( message );
 		if ( !texture || texture->IsError() || width != (int)m_nRenderWidth || height != (int)m_nRenderHeight )
 		{
 			Warning( "OpenVR eye target allocation failed or size mismatched. Lower vr_render_scale and reactivate VR.\n" );
@@ -381,9 +342,6 @@ void CTFOpenVR::CreateRenderTargets( IMaterialSystem *materialSystem )
 		"_rt_OpenVRGlow", m_nRenderWidth, m_nRenderHeight, RT_SIZE_NO_CHANGE,
 		IMAGE_FORMAT_BGRA8888, MATERIAL_RT_DEPTH_NONE,
 		TEXTUREFLAGS_CLAMPS | TEXTUREFLAGS_CLAMPT | TEXTUREFLAGS_NOMIP, 0 ) );
-	OpenVRTrace( m_EyeTexture[VREye_Left].IsValid() && m_EyeTexture[VREye_Right].IsValid()
-		? "RenderTargets: both eye textures created"
-		: "RenderTargets: eye texture creation failed" );
 }
 
 void CTFOpenVR::ShutdownRenderTargets()
@@ -411,14 +369,14 @@ void CTFOpenVR::GetRenderTargetFrameBufferDimensions( int &width, int &height )
 bool CTFOpenVR::Activate()
 {
 	m_nLastTrackingFrame = -1;
-	OpenVRTrace( "Activate: entered" );
+
 	if ( m_bActive )
 		return true;
 
 	vr::EVRInitError error = vr::VRInitError_None;
-	OpenVRTrace( "Activate: calling VR_Init" );
+
 	m_pVRSystem = vr::VR_Init( &error, vr::VRApplication_Scene );
-	OpenVRTrace( "Activate: VR_Init returned" );
+
 	if ( error != vr::VRInitError_None || !m_pVRSystem || !vr::VRCompositor() )
 	{
 		Warning( "OpenVR initialization failed: %s\n", vr::VR_GetVRInitErrorAsEnglishDescription( error ) );
@@ -426,7 +384,6 @@ bool CTFOpenVR::Activate()
 		return false;
 	}
 
-	OpenVRTrace( "Activate: compositor available" );
 	m_pVRSystem->GetRecommendedRenderTargetSize( &m_nRenderWidth, &m_nRenderHeight );
 	const float renderScale = clamp( vr_render_scale.GetFloat(), 0.25f, 2.0f );
 	// Bound resource sizes before float-to-integer conversion and allocation.
@@ -440,7 +397,7 @@ bool CTFOpenVR::Activate()
 	}
 	m_nRenderWidth = Max( 1u, static_cast<uint32>( m_nRenderWidth * renderScale ) );
 	m_nRenderHeight = Max( 1u, static_cast<uint32>( m_nRenderHeight * renderScale ) );
-	OpenVRTrace( "Activate: creating D3D11 bridge" );
+
 	if ( !CreateD3D11Resources() )
 	{
 		Warning( "OpenVR could not create the D3D11 submission bridge.\n" );
@@ -449,10 +406,8 @@ bool CTFOpenVR::Activate()
 		return false;
 	}
 
-	OpenVRTrace( "Activate: D3D11 bridge ready" );
 	m_bActive = true;
 	vr::VRCompositor()->SetTrackingSpace( vr::TrackingUniverseSeated );
-	OpenVRTrace( "Activate: completed" );
 
 	// CClientVirtualReality follows a successful activation with
 	// mat_reset_rendertargets. CTFRenderTargets creates the eye textures from
@@ -508,18 +463,16 @@ bool CTFOpenVR::CreateD3D11Resources()
 	{
 		m_bGPUBridge = true;
 		Msg( "OpenVR using GPU-shared D3D9Ex submission bridge.\n" );
-		OpenVRTrace( "Bridge: GPU sharing enabled" );
+
 		return true;
 	}
 	if ( vr_gpu_bridge.GetBool() )
 	{
 		Warning( "OpenVR GPU sharing unavailable; using the slower CPU submission bridge.\n" );
-		OpenVRTrace( "Bridge: GPU sharing unavailable, using CPU fallback" );
 	}
 	else
 	{
 		Msg( "OpenVR using configured CPU submission bridge.\n" );
-		OpenVRTrace( "Bridge: CPU fallback selected by configuration" );
 	}
 
 	D3D11_TEXTURE2D_DESC desc = {};
@@ -627,16 +580,6 @@ ID3D11Texture2D *CTFOpenVR::CopyEyeGPU( VREye eye )
 	{
 		D3DSURFACE_DESC desc = {};
 		result = source->GetDesc( &desc );
-		static int reports[2] = { 0, 0 };
-		if ( reports[eye] < 3 )
-		{
-			char message[256];
-			Q_snprintf( message, sizeof( message ),
-				"GPU source: frame=%d eye=%d surface=%p size=%ux%u expected=%ux%u",
-				gpGlobals->framecount, eye, source, desc.Width, desc.Height, m_nRenderWidth, m_nRenderHeight );
-			OpenVRTrace( message );
-			++reports[eye];
-		}
 		if ( SUCCEEDED( result ) && ( desc.Width != m_nRenderWidth || desc.Height != m_nRenderHeight ) )
 		{
 			SafeRelease( source );
@@ -682,19 +625,11 @@ ID3D11Texture2D *CTFOpenVR::CopyEyeGPU( VREye eye )
 
 bool CTFOpenVR::SubmitEye( VREye eye )
 {
-	static bool firstAttempt[2] = { true, true };
-	static bool firstSuccess[2] = { true, true };
 	static bool firstError[2] = { true, true };
-	if ( firstAttempt[eye] )
-	{
-		OpenVRTrace( eye == VREye_Left ? "Submit: left eye entered" : "Submit: right eye entered" );
-		firstAttempt[eye] = false;
-	}
 
 	if ( !m_bActive || !m_pD3D11Context ||
 		( !m_bGPUBridge && !m_pSubmitTexture[eye] ) || !m_EyeTexture[eye].IsValid() )
 	{
-		OpenVRTrace( eye == VREye_Left ? "Submit: left prerequisites missing" : "Submit: right prerequisites missing" );
 		return false;
 	}
 
@@ -713,8 +648,7 @@ bool CTFOpenVR::SubmitEye( VREye eye )
 		if ( m_bGPUBridge )
 		{
 			// Do not drain the material queue recursively from RenderView.
-			// GPU submission remains experimental until render-thread ownership
-			// is handled without ExecuteQueued at this callback boundary.
+			// The GPU bridge requires synchronous rendering (mat_queue_mode 0).
 			submitTexture = CopyEyeGPU( eye );
 			copied = submitTexture != NULL;
 		}
@@ -740,18 +674,10 @@ bool CTFOpenVR::SubmitEye( VREye eye )
 	{
 		if ( firstError[eye] )
 		{
-			char trace[128];
-			Q_snprintf( trace, sizeof( trace ), "Submit: eye %d failed with compositor error %d", eye, error );
-			OpenVRTrace( trace );
 			Warning( "OpenVR eye %d submission failed: %d\n", eye, error );
 			firstError[eye] = false;
 		}
 		return false;
-	}
-	if ( firstSuccess[eye] )
-	{
-		OpenVRTrace( eye == VREye_Left ? "Submit: left eye accepted" : "Submit: right eye accepted" );
-		firstSuccess[eye] = false;
 	}
 	// Both eye submissions now describe one complete application frame. Give
 	// the compositor an explicit scheduling boundary instead of immediately
@@ -786,7 +712,6 @@ void CTFOpenVR::ReleaseD3D11Resources()
 }
 
 CTFOpenVR g_TFOpenVR;
-
 } // namespace
 
 ISourceVirtualReality *TFOpenVR_GetSourceVR()

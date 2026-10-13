@@ -49,6 +49,7 @@
 #else
 #include "c_tf_player.h"
 #include "c_baseviewmodel.h"
+#include "sourcevr/isourcevirtualreality.h"
 #include "tf_viewmodel.h"
 #include "hud_crosshair.h"
 #include "c_tf_playerresource.h"
@@ -3202,6 +3203,13 @@ void CTFWeaponBase::DispatchMuzzleFlash( const char* effectName, C_BaseEntity* p
 //-----------------------------------------------------------------------------
 bool CTFWeaponBase::ShouldDraw( void )
 {
+	// VR can render the world weapon in first person. Apply the scope rule
+	// here too, without changing EF_NODRAW or depending on firing animations.
+	C_TFPlayer *pVRLocalPlayer = C_TFPlayer::GetLocalTFPlayer();
+	if ( UseVR() && pVRLocalPlayer && GetOwner() == pVRLocalPlayer &&
+		IsFirstPersonView() && pVRLocalPlayer->m_Shared.InCond( TF_COND_ZOOMED ) )
+		return false;
+
 	C_BaseCombatCharacter *pOwner = GetOwner();
 	if ( !pOwner )
 		return true;

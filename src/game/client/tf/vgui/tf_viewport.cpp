@@ -239,7 +239,11 @@ CON_COMMAND( togglescores, "Toggles score panel")
 	}
 }
 
-// The HUD has a real 4:3 parent, while viewport dialogs and GameUI remain
+static ConVar vr_hudmode( "vr_hudmode", "1", FCVAR_ARCHIVE,
+	"VR gameplay HUD layout: 0 = full viewport, 1 = compact 4:3. Menus, scope and aiming are unchanged.",
+	true, 0.0f, true, 1.0f );
+
+// Toggle between displaying 4:3 or widescreen HUD in VR view
 // parented to the original widescreen viewport. Resource alignment, Think,
 // scheme reloads, and painting all see the same logical HUD dimensions.
 static vgui::PHandle s_VRHudCanvas;
@@ -370,7 +374,8 @@ void UpdateTFVRHudLayout()
 		viewport->SetSize( width, height );
 	C_BasePlayer *player = C_BasePlayer::GetLocalPlayer();
 	const bool spectator = player && player->IsObserver();
-	const int hudWidth = spectator ? width : Min( width, height * 4 / 3 );
+	const bool compactHUD = vr_hudmode.GetBool() && !spectator;
+	const int hudWidth = compactHUD ? Min( width, height * 4 / 3 ) : width;
 	if ( !s_VRHudCanvas.Get() )
 	{
 		s_VRHudViewport = viewport;
@@ -397,6 +402,7 @@ void UpdateTFVRHudLayout()
 		// Aim-projected indicators keep their original full-canvas coordinates.
 		// This changes neither the aim ray nor its projection/recenter limits.
 		if ( !panel || dynamic_cast<CHudCrosshair *>( element ) || dynamic_cast<CTargetID *>( element ) ||
+			!Q_stricmp( panel->GetName(), "HudScope" ) || !Q_stricmp( panel->GetName(), "HudScopeCharge" ) ||
 			dynamic_cast<IViewPortPanel *>( panel ) || panel->IsPopup() )
 			return;
 		vgui::Panel *parent = panel->GetParent();
@@ -418,18 +424,6 @@ void UpdateTFVRHudLayout()
 			changedPanels[changedPanels.AddToTail()] = s_VRHudCanvas->GetChild( i );
 	}
 	ReloadVRHudLayout( viewport, changedPanels );
-}
-
-CON_COMMAND( vr_hud_layout_status, "Print the VR HUD and menu logical canvas sizes." )
-{
-	if ( !UseVR() || !s_VRHudCanvas.Get() || !s_VRHudViewport.Get() )
-	{
-		Msg( "VR gameplay HUD canvas is inactive.\n" );
-		return;
-	}
-	Msg( "VR HUD: %dx%d; menus: %dx%d; aim projection: unchanged; HUD roots: %d\n",
-		s_VRHudCanvas->GetWide(), s_VRHudCanvas->GetTall(),
-		s_VRHudViewport->GetWide(), s_VRHudViewport->GetTall(), s_VRHudParents.Count() );
 }
 
 TFViewport::TFViewport()

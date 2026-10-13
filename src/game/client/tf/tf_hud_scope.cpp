@@ -54,7 +54,10 @@ void WhereToDrawSniperScope ( int *pX, int *pY, int screenWide, int screenTall )
 
 		Vector screen;
 		screen.Init();
-		ScreenTransform(vAimPoint, screen);
+		if ( UseVR() )
+			HudTransform( vAimPoint, screen );
+		else
+			ScreenTransform( vAimPoint, screen );
 
 		// screen[0][1] are in range (-1, 1)
 		float x = 0.5 * ( 1.0f + screen[0] ) * screenWide + 0.5;
@@ -201,7 +204,7 @@ void CHudScopeCharge::Paint( void )
 	if ( UseVR() )
 	{
 		int vx, vy, vw, vh;
-		vgui::surface()->GetFullscreenViewport( vx, vy, vw, vh );
+		vgui::surface()->GetScreenSize( vw, vh );
 
 		int screenWide = vw;
 		int screenTall = vh;
@@ -348,9 +351,9 @@ void CHudScope::ApplySchemeSettings( vgui::IScheme *scheme )
 
 	if ( UseVR() )
 	{
-		// Make it fill the screen.
+		// Scope is composed into the full UI texture, not the per-eye buffer.
 		int iViewportWidth, iViewportHeight;
-		g_pSourceVR->GetViewportBounds( ISourceVirtualReality::VREye_Left, NULL, NULL, &iViewportWidth, &iViewportHeight );
+		vgui::surface()->GetScreenSize( iViewportWidth, iViewportHeight );
 	    SetSize ( iViewportWidth, iViewportHeight );
 		SetBounds ( 0, 0, iViewportWidth, iViewportHeight );
 		// Force it to go direct to the framebuffer.
@@ -423,16 +426,14 @@ void CHudScope::Paint( void )
 	if ( UseVR() )
 	{
 		int vx, vy, vw, vh;
-		vgui::surface()->GetFullscreenViewport( vx, vy, vw, vh );
+		vgui::surface()->GetScreenSize( vw, vh );
 
 		screenWide = vw;
 		screenTall = vh;
-		// This is actually awful - the scope is drawn in HUD-space, which is this completely
-		// artifical 640*480 space that we invent for VR and which doesn't even have square pixels. Ugh.
-		// Hacked good enough to ship. TODO: don't hack it.
-		float fMagnification = 1.0f / g_ClientVirtualReality.GetZoomedModeMagnification();
-		wide = (int)( fMagnification * (float)screenWide );
-		tall = ( wide * 3 ) / 4;
+		// Keep the same normalized aperture across UI and eye resolutions.
+		// Magnification belongs to the eye projection, not the scope artwork.
+		tall = Min( screenTall, screenWide * 3 / 4 );
+		wide = tall * 4 / 3;
 
 		bDisableClipping = true;
 		WhereToDrawSniperScope ( &xMid, &yMid, screenWide, screenTall );

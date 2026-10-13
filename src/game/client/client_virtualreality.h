@@ -159,6 +159,7 @@ private:
 
 	bool			m_bMotionUpdated;
 	bool m_bAimFollowingHead;
+	float m_flScopedMousePitch;
 	QAngle m_AimFollowMouseAccum;
 	double m_flAimFollowLastMouseTime;
 	QAngle m_LastAimFollowViewAngle;
