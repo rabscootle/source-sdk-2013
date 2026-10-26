@@ -737,6 +737,7 @@ void CClassLoadoutPanel::PerformLayout( void )
 	for ( int i = 0; i < m_pItemModelPanels.Count(); i++ )
 	{
 		// Viewing a class loadout. Layout the buttons & the class image.
+		m_pItemModelPanels[i]->SetStatTrakSpacerVisible( false );
 		if ( i >= NUM_ITEM_PANELS_IN_LOADOUT )
 		{
 			m_pItemModelPanels[i]->SetVisible( false );
@@ -795,6 +796,10 @@ void CClassLoadoutPanel::PerformLayout( void )
 				CEconItemView *pItemData = TFInventoryManager()->GetItemInLoadoutForClass( m_iCurrentClassIndex, i );
 				// Enable or disable the item options button for this item model panel
 				pItemOptionsPanel->SetVisible( !m_bInTauntLoadoutMode && AnyOptionsAvailableForItem( pItemData ) );
+				// Only this screen owns the options button; other item panels keep
+				// their normal icon layout even when they show the same weapon.
+				m_pItemModelPanels[i]->SetStatTrakSpacerVisible(
+					pItemOptionsPanel->IsVisible() && i >= LOADOUT_POSITION_PRIMARY && i < LOADOUT_POSITION_HEAD );
 				pItemOptionsPanel->SetCommand( CFmtStr( "options%d", i ) );
 			}
 		}

@@ -1371,6 +1371,8 @@ CItemModelPanel::CItemModelPanel( vgui::Panel *parent, const char *name ) : vgui
 	m_pItemQuantityLabel = NULL;
 	m_pVisionRestrictionImage = NULL;
 	m_pIsStrangeImage = NULL;
+	m_pStatTrakSpacer = NULL;
+	m_bShowStatTrakSpacer = false;
 	m_pIsUnusualImage = NULL;
 	m_pIsLoanerImage = NULL;
 	m_pSeriesLabel = NULL;
@@ -1443,6 +1445,7 @@ void CItemModelPanel::ApplySchemeSettings( vgui::IScheme *pScheme )
 	m_pItemQuantityLabel = NULL;
 	m_pVisionRestrictionImage = NULL;
 	m_pIsStrangeImage = NULL;
+	m_pStatTrakSpacer = NULL;
 	m_pIsUnusualImage = NULL;
 	m_pIsLoanerImage = NULL;
 	m_pSeriesLabel = NULL;
@@ -1576,6 +1579,13 @@ void CItemModelPanel::LoadResFileForCurrentItem( bool bForceLoad )
 	m_pVisionRestrictionImage = dynamic_cast<vgui::ImagePanel*>( FindChildByName( "vision_restriction_icon", true ) );
 
 	m_pIsStrangeImage = dynamic_cast<vgui::ImagePanel*>( FindChildByName( "is_strange_icon", true ) );
+	m_pStatTrakSpacer = FindChildByName( "is_stattrak_spacer", true );
+	if ( m_pStatTrakSpacer )
+	{
+		m_pStatTrakSpacer->SetVisible( false );
+		m_pStatTrakSpacer->SetKeyBoardInputEnabled( false );
+		m_pStatTrakSpacer->SetMouseInputEnabled( false );
+	}
 	m_pIsUnusualImage = dynamic_cast<vgui::ImagePanel*>( FindChildByName( "is_unusual_icon", true ) );
 	m_pIsLoanerImage = dynamic_cast<vgui::ImagePanel*>( FindChildByName( "is_loaner_icon", true ) );
 
@@ -1919,6 +1929,19 @@ void CItemModelPanel::PerformLayout( void )
 	// pin icons to top right corner
 	int xpos = m_iBaseWide - XRES(1);
 	int ypos = YRES(1);
+
+	if ( m_pStatTrakSpacer )
+	{
+		// Reuse the icon's existing Strange and mouse-over visibility checks.
+		const bool bShowSpacer = m_bShowStatTrakSpacer && m_pIsStrangeImage &&
+			m_pIsStrangeImage->IsVisible() && GetStattrak( &m_ItemData );
+		m_pStatTrakSpacer->SetVisible( bShowSpacer );
+		if ( bShowSpacer )
+		{
+			m_pStatTrakSpacer->SetPos( xpos - m_pStatTrakSpacer->GetWide(), ypos );
+			ypos += m_pStatTrakSpacer->GetTall();
+		}
+	}
 
 	if ( m_pPaintIcon && m_pPaintIcon->IsVisible() )
 	{
@@ -2967,6 +2990,10 @@ void CItemModelPanel::HideAllModifierIcons()
 	{
 		m_pIsStrangeImage->SetVisible( false );
 	}
+	if ( m_pStatTrakSpacer )
+	{
+		m_pStatTrakSpacer->SetVisible( false );
+	}
 	if ( m_pIsUnusualImage )
 	{
 		m_pIsUnusualImage->SetVisible( false );
@@ -3400,6 +3427,16 @@ bool CItemModelPanel::HasItem( void )
 	return m_ItemData.IsValid();
 }
 
+void CItemModelPanel::SetStatTrakSpacerVisible( bool bVisible )
+{
+	if ( m_bShowStatTrakSpacer != bVisible )
+	{
+		m_bShowStatTrakSpacer = bVisible;
+		InvalidateLayout();
+	}
+}
+
+//-----------------------------------------------------------------------------
 void CItemModelPanel::SetModelIsHidden( bool bHideModel )
 { 
 	m_bHideModel = bHideModel;

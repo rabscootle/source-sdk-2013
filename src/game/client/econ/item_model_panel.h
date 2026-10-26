@@ -221,6 +221,7 @@ public:
 	CEconItemView *GetItem( void ) { return ( m_ItemData.IsValid() ? &m_ItemData : NULL ); }
 	bool	ModelIsHidden( void ) const { return m_bHideModel; }
 	void	SetModelIsHidden( bool bHideModel );
+	void	SetStatTrakSpacerVisible( bool bVisible );
 	virtual void OnTick() OVERRIDE;
 	void	SetNeedsToLoad();
 	bool	LoadData();
@@ -329,6 +330,7 @@ private:
 	vgui::Label			*m_pItemQuantityLabel;
 	vgui::ImagePanel	*m_pVisionRestrictionImage;
 	vgui::ImagePanel	*m_pIsStrangeImage;
+	vgui::Panel		*m_pStatTrakSpacer;
 	vgui::ImagePanel	*m_pIsUnusualImage;
 	vgui::ImagePanel	*m_pIsLoanerImage;
 	vgui::Label			*m_pSeriesLabel;
@@ -353,6 +355,7 @@ private:
 	bool				m_bMouseOver;
 	bool				m_bSelected;
 	bool				m_bShowEquipped;
+	bool				m_bShowStatTrakSpacer;
 	bool				m_bForceShowEquipped;
 	const char			*m_pszGreyedOutReason;
 	bool				m_bShowGreyedOutTooltip;
