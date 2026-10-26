@@ -148,6 +148,9 @@ private:
 		UtlSymId_t panel;
 		UtlSymId_t variable;
 		Value_t target;
+		// Screen-relative position anchors resolved against the target's canvas.
+		float screenAnchorA, screenAnchorB;
+		int screenDimensionA, screenDimensionB;
 		int interpolationFunction;
 		float	interpolationParameter;
 		float startTime;

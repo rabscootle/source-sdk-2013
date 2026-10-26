@@ -55,10 +55,14 @@ void vgui::SetPanelScreenSizeProvider( PanelScreenSizeProvider provider )
 {
 	s_pPanelScreenSizeProvider = provider;
 }
+bool vgui::GetPanelScreenSize( Panel *panel, int &width, int &height )
+{
+	return s_pPanelScreenSizeProvider && s_pPanelScreenSizeProvider( panel, width, height );
+}
 vgui::PanelScreenSizeScope::PanelScreenSizeScope( Panel *panel ) : m_bChanged( false )
 {
 	int width, height;
-	if ( !s_pPanelScreenSizeProvider || !s_pPanelScreenSizeProvider( panel, width, height ) )
+	if ( !GetPanelScreenSize( panel, width, height ) )
 		return;
 	surface()->GetScreenSize( m_nWidth, m_nHeight );
 	m_bWasOverridden = surface()->IsScreenSizeOverrideActive();

@@ -11,6 +11,7 @@
 #include <vgui/IVGui.h>
 #include <KeyValues.h>
 #include <vgui_controls/AnimationController.h>
+#include <vgui_controls/PanelScreenSizeScope.h>
 #include "filesystem.h"
 #include "filesystem_helpers.h"
 
@@ -282,6 +283,19 @@ void AnimationController::SetupPosition( AnimCmdAnimate_t& cmd, float *output, c
 
 	// set the value
 	*output = static_cast<float>( pos );
+	// Preserve the screen anchor: scripts are shared by panels on different
+	// logical canvases, so parse-time viewport coordinates are not final.
+	const float anchor = r ? 1.0f : ( c ? 0.5f : 0.0f );
+	if ( output == &cmd.target.b )
+	{
+		cmd.screenAnchorB = anchor;
+		cmd.screenDimensionB = screendimension;
+	}
+	else
+	{
+		cmd.screenAnchorA = anchor;
+		cmd.screenDimensionA = screendimension;
+	}
 }
 
 
@@ -1369,6 +1383,13 @@ void AnimationController::StartCmd_Animate(Panel *panel, UtlSymId_t seqName, Ani
 	// values
 	anim.started = false;
 	anim.endValue = cmd.target;
+	int canvasWidth, canvasHeight;
+	if ( GetPanelScreenSize( panel, canvasWidth, canvasHeight ) )
+	{
+		const int dimensionA = cmd.variable == m_sYPos ? canvasHeight : canvasWidth;
+		anim.endValue.a += cmd.screenAnchorA * ( dimensionA - cmd.screenDimensionA );
+		anim.endValue.b += cmd.screenAnchorB * ( canvasHeight - cmd.screenDimensionB );
+	}
 
 	anim.canBeCancelled = bCanBeCancelled;
 

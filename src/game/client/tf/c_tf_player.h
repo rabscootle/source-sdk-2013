@@ -193,6 +193,7 @@ public:
 	void			TurnOffTauntCam( void );
 	void			TurnOffTauntCam_Finish( void );
 	bool			IsTaunting( void ) const { return m_Shared.InCond( TF_COND_TAUNTING ); }
+	bool			IsTauntCameraActive() const { return m_bTauntInterpolating; }
 
 	bool			IsViewingCYOAPDA( void ) const { return m_bViewingCYOAPDA; }
 	bool			IsRegenerating( void ) const { return m_bRegenerating; }

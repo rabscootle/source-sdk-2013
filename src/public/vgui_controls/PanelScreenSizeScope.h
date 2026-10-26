@@ -8,6 +8,7 @@ class Panel;
 // Module-local layout canvas; never changes render targets or input coordinates.
 typedef bool (*PanelScreenSizeProvider)( Panel *, int &, int & );
 void SetPanelScreenSizeProvider( PanelScreenSizeProvider provider );
+bool GetPanelScreenSize( Panel *panel, int &width, int &height );
 class PanelScreenSizeScope
 {
 public:

@@ -23,10 +23,27 @@
 #include "tier0/vprof_telemetry.h"
 #include <time.h>
 #include "steam/steam_api.h"
+#ifdef TF_CLIENT_DLL
+#include "c_tf_player.h"
+#include "iinput.h"
+#endif
+
+static bool IsVRThirdPersonTauntCamera()
+{
+#ifdef TF_CLIENT_DLL
+	C_TFPlayer *player = C_TFPlayer::GetLocalTFPlayer();
+	// Include the camera's blend back to first person, not just the condition.
+	return player && player->IsAlive() && !player->IsObserver() &&
+		player->IsTauntCameraActive() && input->CAM_IsThirdPerson();
+#else
+	return false;
+#endif
+}
 
 const char *COM_GetModDirectory(); // return the mod dir (rather than the complete -game param, which can be a path)
 
 CClientVirtualReality g_ClientVirtualReality;
+
 EXPOSE_SINGLE_INTERFACE_GLOBALVAR( CClientVirtualReality, IClientVirtualReality, 
 	CLIENTVIRTUALREALITY_INTERFACE_VERSION, g_ClientVirtualReality );
 
@@ -81,6 +98,9 @@ ConVar vr_translation_limit( "vr_translation_limit", "10.0", 0, "How far the in-
 ConVar vr_render_hud_in_world( "vr_render_hud_in_world", "1" );
 ConVar vr_hud_max_fov( "vr_hud_max_fov", "60", FCVAR_ARCHIVE, "Max FOV of the HUD" );
 ConVar vr_hud_forward( "vr_hud_forward", "500", FCVAR_ARCHIVE, "Apparent distance of the HUD in inches" );
+ConVar vr_menu_scale( "vr_menu_scale", "1.25", FCVAR_ARCHIVE,
+	"Apparent size of VR menus. 1 restores the original size; does not change rendering resolution or gameplay aim.",
+	true, 0.5f, true, 2.0f );
 ConVar vr_hud_display_ratio( "vr_hud_display_ratio", "0.95", FCVAR_ARCHIVE );
 ConVar vr_hud_never_overlay( "vr_hud_never_overlay", "0" );
 
@@ -550,7 +570,16 @@ bool CClientVirtualReality::OverrideView ( CViewSetup *pViewMiddle, Vector *pVie
 	// Now figure out the three principal matrices: m_TorsoFromMideye, m_WorldFromMidEye, m_WorldFromWeapon
 	// m_TorsoFromMideye is done so that OverridePlayerMotion knows what to do with WASD.
 
-	switch ( m_hmmMovementActual )
+	if ( IsVRThirdPersonTauntCamera() )
+	{
+		// TF already calculated the orbit, distance and collision-adjusted origin.
+		// Add tracking to that camera without feeding it back into mouse input.
+		worldFromTorso.SetupMatrixOrgAngles( originalMiddleOrigin, originalMiddleAngles );
+		m_TorsoFromMideye = matMideyeZeroFromMideyeCurrent;
+		m_WorldFromMidEye = worldFromTorso * matMideyeZeroFromMideyeCurrent;
+		m_WorldFromWeapon = worldFromTorso;
+	}
+	else switch ( m_hmmMovementActual )
 	{
 	case HMM_SHOOTFACE_MOVEFACE:
 	case HMM_SHOOTFACE_MOVETORSO:
@@ -846,6 +875,18 @@ bool CClientVirtualReality::OverridePlayerMotion( float flInputSampleFrametime, 
 
 
 	m_bMotionUpdated = true;
+	if ( IsVRThirdPersonTauntCamera() )
+	{
+		// Preserve standard TF mouse/taunt steering. Neither bounded aim nor
+		// head-follow recentering may rewrite the third-person orbit input.
+		m_bAimFollowingHead = false;
+		m_AimFollowMouseAccum.Init();
+		m_flScopedMousePitch = 0.0f;
+		m_PlayerTorsoAngle.Init( 0.0f, curAngles[YAW], 0.0f );
+		m_WorldFromWeapon.SetupMatrixOrgAngles( m_WorldFromWeapon.GetTranslation(), curAngles );
+		m_PlayerLastMovement = curMotion;
+		return true;
+	}
 
 	// originalAngles tells us what the weapon angles were before whatever mouse, joystick, etc thing changed them - called "old"
 	// curAngles holds the new weapon angles after mouse, joystick, etc. applied.
@@ -1203,8 +1244,13 @@ bool CClientVirtualReality::CanOverlayHudQuad()
 // --------------------------------------------------------------------
 void CClientVirtualReality::GetHUDBounds( Vector *pViewer, Vector *pUL, Vector *pUR, Vector *pLL, Vector *pLR )
 {
-	Vector vHalfWidth = m_WorldFromHud.GetLeft() * -m_fHudHalfWidth;
-	Vector vHalfHeight = m_WorldFromHud.GetUp() * m_fHudHalfHeight;
+	// Enlarge the completed menu image, including its software cursor, without
+	// changing VGUI layout/input coordinates or the gameplay aim projection.
+	// Gameplay returns to its normal HUD size as soon as the menu closes.
+	const bool menuVisible = !engine->IsInGame() || enginevgui->IsGameUIVisible();
+	const float menuScale = menuVisible ? vr_menu_scale.GetFloat() : 1.0f;
+	Vector vHalfWidth = m_WorldFromHud.GetLeft() * ( -m_fHudHalfWidth * menuScale );
+	Vector vHalfHeight = m_WorldFromHud.GetUp() * ( m_fHudHalfHeight * menuScale );
 	Vector vHUDOrigin = m_PlayerViewOrigin + m_WorldFromHud.GetForward() * vr_hud_forward.GetFloat();
 
 	*pViewer = m_PlayerViewOrigin;
