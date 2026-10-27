@@ -3321,18 +3321,6 @@ void CStatTrakDigitProxy::OnBind( void *pC_BaseEntity )
 		return;
 	}
 
-	// Temporary learning/debug output. Material proxies may bind multiple times
-	// per frame, so rate-limit the message to once per second.
-	static float s_flNextEventTypePrintTime = 0.0f;
-	if ( gpGlobals->curtime >= s_flNextEventTypePrintTime )
-	{
-		Msg(
-			"[StatClock] Score: %d | Kill eater event enum: %d\n",
-			nKillEaterAltScore,
-			(int)eEventType
-		);
-		s_flNextEventTypePrintTime = gpGlobals->curtime + 1.0f;
-	}
 	// ===== END STAT CLOCK ENHANCEMENT: RECEIVE SELECTED COUNTER EVENT TYPE =====
 
 
@@ -3396,27 +3384,6 @@ ConVar tf_stattrak_icon_scale( "tf_stattrak_icon_scale", "1.0", FCVAR_DEVELOPMEN
 
 void CStatTrakIconProxy::OnBind( void *pC_BaseEntity )
 {
-	// ===== BEGIN STAT CLOCK ENHANCEMENT: ICON MATERIAL DIAGNOSTIC =====
-	// A magenta checkerboard means Source resolved an error texture. Report the
-	// material and texture names so viewmodel/loadout material differences are
-	// visible in the console instead of being mistaken for atlas-offset errors.
-	static float s_flNextIconMaterialPrintTime = 0.0f;
-	if ( gpGlobals->curtime >= s_flNextIconMaterialPrintTime )
-	{
-		bool bFoundBaseTexture = false;
-		IMaterialVar *pBaseTextureVar = GetMaterial()->FindVar( "$basetexture", &bFoundBaseTexture, false );
-		ITexture *pBaseTexture = bFoundBaseTexture && pBaseTextureVar ? pBaseTextureVar->GetTextureValue() : NULL;
-
-		Msg(
-			"[StatClock] Icon material '%s' | base texture '%s' | error: %s\n",
-			GetMaterial()->GetName(),
-			pBaseTexture ? pBaseTexture->GetName() : "<missing $basetexture>",
-			IsErrorTexture( pBaseTexture ) ? "yes" : "no"
-		);
-		s_flNextIconMaterialPrintTime = gpGlobals->curtime + 2.0f;
-	}
-	// ===== END STAT CLOCK ENHANCEMENT: ICON MATERIAL DIAGNOSTIC =====
-
 	// ===== BEGIN STAT CLOCK ENHANCEMENT: ENUM-DRIVEN ICON OFFSET =====
 	int nScore = 0;
 	kill_eater_event_t eEventType = kKillEaterEvent_PlayerKill;

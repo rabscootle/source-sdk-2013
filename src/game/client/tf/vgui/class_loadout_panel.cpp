@@ -509,7 +509,6 @@ void CLoadoutItemOptionsPanel::ApplyStatTrakDisplayOverride( int iDisplaySlot )
 		}
 	}
 
-	Msg( "[StatClock] Display counter selected: Kill Eater slot %d\n", iDisplaySlot );
 	if ( g_pClassLoadoutPanel )
 		g_pClassLoadoutPanel->UpdateModelPanels();
 }
